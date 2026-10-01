@@ -1,0 +1,9 @@
+# Servidor local para probar la app en http://localhost:8080 (y desde tu celular en la misma red: http://IP-de-tu-PC:8080).
+# Uso:  docker compose up -d     ·  detener: docker compose down
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro

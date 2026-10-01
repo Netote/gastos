@@ -1,0 +1,24 @@
+{
+  "name": "Gastos · Control de ingresos y gastos",
+  "short_name": "Gastos",
+  "description": "Control personal de ingresos, gastos, presupuestos y metas de ahorro.",
+  "lang": "es-MX",
+  "start_url": "./#resumen",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F172A",
+  "theme_color": "#1D4ED8",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Movimientos", "url": "./#movimientos"},
+    {"name": "Metas", "url": "./#metas"}
+  ]
+}

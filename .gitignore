@@ -1,0 +1,4 @@
+node_modules/
+Notepad.txt
+*.log
+.DS_Store

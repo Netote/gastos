@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EAF0FB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Control personal de ingresos, gastos, presupuestos y metas de ahorro.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Gastos">
+<title>Gastos · Control de ingresos y gastos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/ibm-plex-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-sans-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+<script src="js/boot.js"></script>
+<script src="vendor/chart.umd.min.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<noscript><p class="noscript">Esta aplicación necesita JavaScript para funcionar.</p></noscript>
+<a class="skip" href="#main">Saltar al contenido</a>
+
+<!-- Pantalla de acceso (solo cuando la nube está configurada y no hay sesión) -->
+<section id="authView" class="auth" hidden aria-labelledby="authTitle">
+  <div class="auth-card card">
+    <span class="logo lg" data-ico="wallet:28"></span>
+    <h1 id="authTitle">Gastos</h1>
+    <p class="muted" id="authSub">Inicia sesión para ver tus datos en todos tus dispositivos.</p>
+    <form id="authForm" novalidate>
+      <div class="field">
+        <label for="aEmail">Correo electrónico</label>
+        <input id="aEmail" name="email" type="email" autocomplete="username" inputmode="email" required>
+      </div>
+      <div class="field" id="aPassField">
+        <label for="aPass">Contraseña</label>
+        <input id="aPass" name="password" type="password" autocomplete="current-password" minlength="8" required>
+        <p class="hint" id="aPassHint" hidden>Mínimo 8 caracteres.</p>
+      </div>
+      <p class="err" id="authErr" role="alert" hidden></p>
+      <p class="ok" id="authOk" role="status" hidden></p>
+      <button type="submit" id="authSubmit" class="btn primary block">Entrar</button>
+    </form>
+    <div class="auth-alt">
+      <button type="button" id="authToggle" class="linklike">¿No tienes cuenta? Crear una</button>
+      <button type="button" id="authForgot" class="linklike">Olvidé mi contraseña</button>
+    </div>
+  </div>
+</section>
+
+<div id="app" hidden>
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <span class="logo" data-ico="wallet:22"></span>
+      <div><p class="brand-name">Gastos</p><p class="brand-sub">Control de ingresos y gastos</p></div>
+    </div>
+    <div class="period" role="group" aria-label="Periodo">
+      <button type="button" id="prevM" class="icon-btn" aria-label="Mes anterior" data-ico="left"></button>
+      <button type="button" id="periodLabel" class="period-label" aria-live="polite" title="Volver al mes actual"></button>
+      <button type="button" id="nextM" class="icon-btn" aria-label="Mes siguiente" data-ico="right"></button>
+    </div>
+    <div class="top-actions">
+      <button type="button" id="syncBtn" class="chip" aria-live="polite"></button>
+      <button type="button" id="addTop" class="btn primary desk-only"><span data-ico="plus:18"></span><span>Agregar</span></button>
+      <button type="button" id="themeBtn" class="icon-btn" aria-label="Cambiar tema"></button>
+      <button type="button" id="settingsBtn" class="icon-btn" aria-label="Datos y ajustes" title="Datos y ajustes" data-ico="sliders"></button>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Secciones">
+    <div class="wrap tabs-in">
+      <a href="#resumen" data-view="resumen"><span data-ico="dashboard"></span><span>Resumen</span></a>
+      <a href="#movimientos" data-view="movimientos"><span data-ico="list"></span><span>Movimientos</span></a>
+      <a href="#presupuestos" data-view="presupuestos"><span data-ico="pie"></span><span>Presupuestos</span></a>
+      <a href="#metas" data-view="metas"><span data-ico="target"></span><span>Metas</span></a>
+      <a href="#fijos" data-view="fijos"><span data-ico="repeat"></span><span>Fijos</span></a>
+    </div>
+  </nav>
+</header>
+
+<main id="main" class="wrap" tabindex="-1">
+  <div id="banner" class="banner" hidden>
+    <p>Estás viendo <strong>datos de ejemplo</strong>.</p>
+    <button type="button" id="clearSample" class="btn sm">Empezar desde cero</button>
+  </div>
+
+  <!-- Resumen -->
+  <section class="view" id="v-resumen" data-view="resumen" aria-labelledby="h-resumen">
+    <h1 class="sr-only" id="h-resumen">Resumen del mes</h1>
+    <div id="kpis" class="kpis"></div>
+    <div class="grid">
+      <section class="card c-7" aria-labelledby="donutTitle">
+        <div class="card-head"><div><h2 id="donutTitle">Gastos por categoría</h2><p class="sub" id="donutSub"></p></div></div>
+        <div id="donutEmpty" class="empty" hidden>Sin gastos en este mes.</div>
+        <div id="donutWrap" class="donut-wrap">
+          <div class="chart-box donut-box"><canvas id="donutCanvas" role="img" aria-label="Gráfica de dona de gastos por categoría"></canvas><div class="donut-center" aria-hidden="true"><span id="donutTotal"></span><small>gastado</small></div></div>
+          <ul id="legend" class="legend" aria-label="Detalle por categoría"></ul>
+        </div>
+      </section>
+      <section class="card c-5" aria-labelledby="insTitle">
+        <div class="card-head"><div><h2 id="insTitle">Indicadores</h2><p class="sub">Para decidir mejor este mes</p></div></div>
+        <ul id="insights" class="insights"></ul>
+      </section>
+      <section class="card c-7" aria-labelledby="barsTitle">
+        <div class="card-head"><div><h2 id="barsTitle">Ingresos vs. gastos</h2><p class="sub">Últimos 6 meses</p></div></div>
+        <div id="barsEmpty" class="empty" hidden>Aún no hay movimientos en estos 6 meses.</div>
+        <div id="barsBox" class="chart-box"><canvas id="barsCanvas" role="img" aria-label="Gráfica de barras de ingresos y gastos"></canvas></div>
+        <details class="details" id="barsDetails"><summary>Ver datos en tabla</summary><div class="table-scroll" id="barsTable"></div></details>
+      </section>
+      <section class="card c-5" aria-labelledby="flowTitle">
+        <div class="card-head"><div><h2 id="flowTitle">Flujo del mes</h2><p class="sub">Acumulado día a día</p></div></div>
+        <div id="flowEmpty" class="empty" hidden>Aún no hay movimientos en este mes.</div>
+        <div id="flowBox" class="chart-box"><canvas id="flowCanvas" role="img" aria-label="Gráfica de líneas del flujo acumulado del mes"></canvas></div>
+      </section>
+      <section class="card c-12" aria-labelledby="recentTitle">
+        <div class="card-head"><h2 id="recentTitle">Últimos movimientos</h2><a href="#movimientos" class="btn sm">Ver todos</a></div>
+        <ul id="recentList" class="tx-list"></ul>
+      </section>
+    </div>
+  </section>
+
+  <!-- Movimientos -->
+  <section class="view" id="v-movimientos" data-view="movimientos" aria-labelledby="h-mov" hidden>
+    <div class="card">
+      <div class="card-head"><h1 class="h2" id="h-mov">Movimientos</h1></div>
+      <div class="filters">
+        <div class="f-search"><label for="qSearch">Buscar</label><input id="qSearch" type="search" placeholder="Descripción, categoría o monto" autocomplete="off" enterkeyhint="search"></div>
+        <div><label for="qType">Tipo</label><select id="qType"><option value="all">Todos</option><option value="expense">Gastos</option><option value="income">Ingresos</option></select></div>
+        <div><label for="qCat">Categoría</label><select id="qCat"></select></div>
+        <div><label for="qSort">Ordenar</label><select id="qSort"><option value="date-desc">Más recientes</option><option value="date-asc">Más antiguos</option><option value="amt-desc">Mayor monto</option><option value="amt-asc">Menor monto</option></select></div>
+        <label class="chk"><input type="checkbox" id="qAll"> Todos los meses</label>
+      </div>
+      <p class="list-summary" id="listSummary" aria-live="polite"></p>
+      <div id="txList"></div>
+      <button type="button" id="moreBtn" class="btn block" hidden>Mostrar más</button>
+    </div>
+  </section>
+
+  <!-- Presupuestos -->
+  <section class="view" id="v-presupuestos" data-view="presupuestos" aria-labelledby="h-bud" hidden>
+    <div class="card">
+      <div class="card-head"><div><h1 class="h2" id="h-bud">Presupuestos</h1><p class="sub" id="budSub">Define un límite mensual por categoría</p></div></div>
+      <div id="budTotal" class="bud-total" hidden></div>
+      <ul id="budList" class="bud-list"></ul>
+    </div>
+  </section>
+
+  <!-- Metas de ahorro -->
+  <section class="view" id="v-metas" data-view="metas" aria-labelledby="h-goals" hidden>
+    <div class="view-head">
+      <div><h1 class="h2" id="h-goals">Metas de ahorro</h1><p class="sub">Separa dinero para lo que importa y mide tu avance</p></div>
+      <button type="button" id="newGoal" class="btn primary"><span data-ico="plus:18"></span><span>Nueva meta</span></button>
+    </div>
+    <div id="goalList" class="goal-grid"></div>
+  </section>
+
+  <!-- Recurrentes -->
+  <section class="view" id="v-fijos" data-view="fijos" aria-labelledby="h-rec" hidden>
+    <div class="view-head">
+      <div><h1 class="h2" id="h-rec">Pagos e ingresos fijos</h1><p class="sub">Se registran solos el día que toca: renta, suscripciones, quincena, meses sin intereses</p></div>
+      <button type="button" id="newRec" class="btn primary"><span data-ico="plus:18"></span><span>Nuevo fijo</span></button>
+    </div>
+    <div id="recSummary" class="rec-summary"></div>
+    <div id="recList" class="card rec-card"></div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+
+<button type="button" id="fab" class="fab mob-only" aria-label="Agregar movimiento" data-ico="plus:26"></button>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Agregar / editar movimiento -->
+<dialog id="txDlg" class="dlg sheet" aria-labelledby="txTitle">
+  <form id="txForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="txTitle">Nuevo movimiento</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div id="errSummary" class="err-summary" role="alert" tabindex="-1" hidden></div>
+      <div class="seg" id="typeSeg" role="radiogroup" aria-label="Tipo de movimiento">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="expense">Gasto</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="income">Ingreso</button>
+      </div>
+      <div class="field">
+        <label for="fAmount">Monto</label>
+        <div class="prefix big"><span class="cur-sym">$</span><input id="fAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" enterkeyhint="next"></div>
+        <p class="err" id="fAmountErr" hidden></p>
+      </div>
+      <fieldset class="field">
+        <legend>Categoría</legend>
+        <div id="fCats" class="cat-grid"></div>
+        <p class="err" id="fCatsErr" hidden></p>
+      </fieldset>
+      <div class="row2">
+        <div class="field">
+          <label for="fDate">Fecha</label>
+          <input id="fDate" type="date">
+          <p class="err" id="fDateErr" hidden></p>
+        </div>
+        <div class="field">
+          <label for="fDesc">Descripción <span class="opt">(opcional)</span></label>
+          <input id="fDesc" type="text" maxlength="120" autocomplete="off" placeholder="Ej. Supermercado" enterkeyhint="done">
+        </div>
+      </div>
+      <p class="hint" id="fRecHint" hidden></p>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="fDelete" class="btn danger" hidden><span data-ico="trash:18"></span><span>Eliminar</span></button>
+      <button type="submit" id="fSubmit" class="btn primary grow">Agregar gasto</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Meta de ahorro -->
+<dialog id="goalDlg" class="dlg sheet" aria-labelledby="goalTitle">
+  <form id="goalForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="goalTitle">Nueva meta</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div class="field"><label for="gName">Nombre</label><input id="gName" type="text" maxlength="60" autocomplete="off" placeholder="Ej. Fondo de emergencia"><p class="err" id="gNameErr" hidden></p></div>
+      <div class="row2">
+        <div class="field"><label for="gTarget">Monto objetivo</label><div class="prefix"><span class="cur-sym">$</span><input id="gTarget" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div><p class="err" id="gTargetErr" hidden></p></div>
+        <div class="field"><label for="gSaved">Ya tengo ahorrado</label><div class="prefix"><span class="cur-sym">$</span><input id="gSaved" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div><p class="err" id="gSavedErr" hidden></p></div>
+      </div>
+      <div class="field"><label for="gDeadline">Fecha límite <span class="opt">(opcional)</span></label><input id="gDeadline" type="date"><p class="hint">Con fecha te digo cuánto apartar cada mes.</p></div>
+      <fieldset class="field"><legend>Color</legend><div id="gColors" class="swatches"></div></fieldset>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="gDelete" class="btn danger" hidden><span data-ico="trash:18"></span><span>Eliminar</span></button>
+      <button type="submit" class="btn primary grow" id="gSubmit">Guardar meta</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Abonar / retirar de una meta -->
+<dialog id="contribDlg" class="dlg sheet" aria-labelledby="cTitle">
+  <form id="contribForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="cTitle">Abonar a la meta</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div class="seg" id="cSeg" role="radiogroup" aria-label="Operación">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="add">Abonar</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="sub">Retirar</button>
+      </div>
+      <div class="field"><label for="cAmount">Monto</label><div class="prefix big"><span class="cur-sym">$</span><input id="cAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div><p class="err" id="cAmountErr" hidden></p></div>
+      <p class="hint" id="cHint"></p>
+    </div>
+    <div class="dlg-foot"><button type="submit" class="btn primary grow" id="cSubmit">Abonar</button></div>
+  </form>
+</dialog>
+
+<!-- Pago / ingreso fijo -->
+<dialog id="recDlg" class="dlg sheet" aria-labelledby="recTitle">
+  <form id="recForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="recTitle">Nuevo fijo</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div class="seg" id="rSeg" role="radiogroup" aria-label="Tipo">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="expense">Gasto fijo</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="income">Ingreso fijo</button>
+      </div>
+      <div class="field"><label for="rName">Nombre</label><input id="rName" type="text" maxlength="60" autocomplete="off" placeholder="Ej. Renta, Netflix, Laptop a 12 MSI"><p class="err" id="rNameErr" hidden></p></div>
+      <div class="row2">
+        <div class="field"><label for="rAmount">Monto por periodo</label><div class="prefix"><span class="cur-sym">$</span><input id="rAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div><p class="err" id="rAmountErr" hidden></p></div>
+        <div class="field"><label for="rCat">Categoría</label><select id="rCat"></select><p class="err" id="rCatErr" hidden></p></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="rDay">Día del mes</label><input id="rDay" type="number" inputmode="numeric" min="1" max="31" placeholder="1"><p class="err" id="rDayErr" hidden></p></div>
+        <div class="field"><label for="rStart">Desde el mes</label><input id="rStart" type="month"><p class="err" id="rStartErr" hidden></p></div>
+      </div>
+      <div class="field"><label for="rOcc">Número de pagos <span class="opt">(opcional)</span></label><input id="rOcc" type="number" inputmode="numeric" min="1" max="600" placeholder="Sin fin"><p class="hint">Para meses sin intereses o créditos: pon el total de pagos y se detiene solo.</p><p class="err" id="rOccErr" hidden></p></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="rDelete" class="btn danger" hidden><span data-ico="trash:18"></span><span>Eliminar</span></button>
+      <button type="submit" class="btn primary grow" id="rSubmit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Ajustes -->
+<dialog id="setDlg" class="dlg sheet" aria-labelledby="setTitle">
+  <div class="dlg-head"><h2 id="setTitle">Datos y ajustes</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+  <div class="dlg-body">
+    <section id="accountSec">
+      <h3>Cuenta y sincronización</h3>
+      <p id="accountInfo" class="muted"></p>
+      <div class="row" id="accountBtns"></div>
+    </section>
+    <section>
+      <h3>Moneda</h3>
+      <label for="curSel">Moneda para mostrar los montos</label>
+      <select id="curSel"><option value="MXN">Peso mexicano (MXN)</option><option value="USD">Dólar estadounidense (USD)</option><option value="EUR">Euro (EUR)</option></select>
+      <p class="hint">Solo cambia el formato; no convierte los montos ya registrados.</p>
+    </section>
+    <section>
+      <h3>Respaldo</h3>
+      <div class="row">
+        <button type="button" id="expCsv" class="btn"><span data-ico="download:18"></span><span>Exportar CSV</span></button>
+        <button type="button" id="expJson" class="btn"><span data-ico="download:18"></span><span>Respaldo JSON</span></button>
+        <label class="btn" for="impFile"><span data-ico="upload:18"></span><span>Importar respaldo</span></label>
+        <input type="file" id="impFile" accept="application/json,.json" class="sr-only">
+      </div>
+      <p class="hint" id="impMsg" role="status"></p>
+      <div id="impConfirm" class="confirm" hidden>
+        <p id="impConfirmTxt"></p>
+        <div class="row"><button type="button" id="impYes" class="btn primary">Reemplazar mis datos</button><button type="button" id="impNo" class="btn">Cancelar</button></div>
+      </div>
+    </section>
+    <section>
+      <h3>Datos</h3>
+      <div class="row"><button type="button" id="seedBtn" class="btn">Cargar datos de ejemplo</button><button type="button" id="wipeBtn" class="btn danger">Borrar todo</button></div>
+      <p class="hint" id="installHint"></p>
+    </section>
+  </div>
+</dialog>
+</body>
+</html>
