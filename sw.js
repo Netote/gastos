@@ -4,7 +4,7 @@
  * con respaldo en caché. Las llamadas a Supabase no se tocan.
  * Cambia VERSION al publicar cambios para limpiar cachés viejas.
  */
-const VERSION = 'gastos-v2.0.0';
+const VERSION = 'gastos-v2.0.1';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/boot.js', 'js/app.js', 'js/util.js', 'js/store.js', 'js/sync.js', 'js/config.js', 'js/charts.js', 'js/icons.js',
