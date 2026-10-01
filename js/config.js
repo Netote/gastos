@@ -4,5 +4,5 @@
  * La clave publishable/anon es pública por diseño: tus datos los protege el login + Row Level Security.
  * NUNCA pongas aquí la clave secret / service_role.
  */
-export const SUPABASE_URL = '';
+export const SUPABASE_URL = 'https://htbhocyphwuaahkmtkip.supabase.co';
 export const SUPABASE_KEY = '';
