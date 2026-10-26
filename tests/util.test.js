@@ -106,3 +106,27 @@ test('cleanTx valida respaldos y rechaza ids peligrosos', () => {
   assert.equal(U.cleanTx({type:'income', category:'ocio', date:'2026-09-01', amount:100}), null); // categoría de otro tipo
   assert.equal(U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:1.5}), null);
 });
+
+test('merchantKey ignora acentos, signos y números sueltos', () => {
+  assert.equal(U.merchantKey('OXXO 1234 CDMX'), 'oxxo cdmx');
+  assert.equal(U.merchantKey('  Café  Ñandú #12 '), 'cafe nandu');
+  assert.equal(U.merchantKey('7-Eleven MX01'), 'eleven mx01'); // "mx01" mezcla letras y números: se conserva
+  assert.equal(U.merchantKey('12345'), '');
+  assert.equal(U.merchantKey(''), '');
+});
+
+test('byCard suma gastos por tarjeta y omite los que no tienen', () => {
+  const list = [
+    {type:'expense', amount:500, card:'BBVA'}, {type:'expense', amount:1500, card:'Nu'}, {type:'expense', amount:700, card:'BBVA'},
+    {type:'expense', amount:900}, {type:'income', amount:9000, card:'BBVA'}
+  ];
+  assert.deepEqual(U.byCard(list), [['BBVA', 1200], ['Nu', 1500]].sort((a, b) => b[1] - a[1]));
+  assert.deepEqual(U.byCard([]), []);
+});
+
+test('cleanTx conserva tarjeta y comercio, y recorta longitudes', () => {
+  const t = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, card:'  Nu  ', merchant:'x'.repeat(100), source:'wallet', review:true});
+  assert.equal(t.card, 'Nu'); assert.equal(t.merchant.length, 60); assert.equal(t.source, 'wallet'); assert.equal(t.review, true);
+  const plain = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, source:'otro', review:'yes'});
+  assert.equal(plain.source, null); assert.equal(plain.review, false); assert.equal(plain.card, null);
+});

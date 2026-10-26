@@ -6,7 +6,7 @@
  */
 import {uid} from './util.js';
 
-export const TABLES = ['transactions', 'budgets', 'goals', 'recurring', 'settings'];
+export const TABLES = ['transactions', 'budgets', 'goals', 'recurring', 'settings', 'merchant_rules'];
 const KEY = 'gastos:v2';
 const LEGACY_KEY = 'gastos-app:v1';
 

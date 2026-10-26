@@ -94,6 +94,14 @@
   <!-- Resumen -->
   <section class="view" id="v-resumen" data-view="resumen" aria-labelledby="h-resumen">
     <h1 class="sr-only" id="h-resumen">Resumen del mes</h1>
+    <section id="reviewCard" class="card review" aria-labelledby="reviewTitle" hidden>
+      <div class="card-head">
+        <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay. Toca uno para corregirlo o confirma con la palomita.</p></div>
+        <button type="button" id="confirmAll" class="btn sm">Confirmar todos</button>
+      </div>
+      <ul id="reviewList" class="tx-list"></ul>
+      <p id="reviewMore" class="hint" hidden></p>
+    </section>
     <div id="kpis" class="kpis"></div>
     <div class="grid">
       <section class="card c-7" aria-labelledby="donutTitle">
@@ -210,6 +218,12 @@
           <input id="fDesc" type="text" maxlength="120" autocomplete="off" placeholder="Ej. Supermercado" enterkeyhint="done">
         </div>
       </div>
+      <div class="field">
+        <label for="fCard">Método de pago <span class="opt">(opcional)</span></label>
+        <input id="fCard" type="text" maxlength="40" list="cardList" autocomplete="off" placeholder="Ej. BBVA Azul, Efectivo" enterkeyhint="done">
+        <datalist id="cardList"></datalist>
+      </div>
+      <label class="chk remember" id="fRememberRow" hidden><input type="checkbox" id="fRemember"> <span id="fRememberTxt"></span></label>
       <p class="hint" id="fRecHint" hidden></p>
     </div>
     <div class="dlg-foot">
@@ -290,6 +304,32 @@
       <h3>Cuenta y sincronización</h3>
       <p id="accountInfo" class="muted"></p>
       <div class="row" id="accountBtns"></div>
+    </section>
+    <section id="walletSec" hidden>
+      <h3>Apple Pay (Wallet)</h3>
+      <p id="walletInfo" class="muted"></p>
+      <div class="row" id="walletBtns"></div>
+      <div id="walletSecret" class="confirm" hidden>
+        <p><strong>Guarda estos datos ahora.</strong> El token no se vuelve a mostrar; si lo pierdes, genera uno nuevo.</p>
+        <div class="copy"><label for="wUrl">Dirección (URL)</label><div class="copy-row"><input id="wUrl" readonly><button type="button" class="btn sm" data-copy="wUrl">Copiar</button></div></div>
+        <div class="copy"><label for="wKey">Clave pública (apikey)</label><div class="copy-row"><input id="wKey" readonly><button type="button" class="btn sm" data-copy="wKey">Copiar</button></div></div>
+        <div class="copy"><label for="wToken">Tu token secreto</label><div class="copy-row"><input id="wToken" readonly><button type="button" class="btn sm" data-copy="wToken">Copiar</button></div></div>
+      </div>
+      <details class="details">
+        <summary>Cómo armar el atajo en el iPhone</summary>
+        <ol class="steps">
+          <li>Abre <strong>Atajos → Automatización → +</strong> y elige <strong>Transacción</strong>. Selecciona tus tarjetas y activa <strong>Ejecutar inmediatamente</strong>.</li>
+          <li>Agrega la acción <strong>Obtener contenido de URL</strong>. En <em>URL</em> pega la dirección de arriba y cambia el método a <strong>POST</strong>.</li>
+          <li>En <em>Encabezados</em> agrega <code>apikey</code> con la clave pública y <code>Content-Type</code> con <code>application/json</code>.</li>
+          <li>En <em>Cuerpo de la solicitud</em> elige <strong>JSON</strong> y agrega estos campos de tipo Texto: <code>p_token</code> (tu token), <code>p_amount</code> (variable <em>Monto</em> de la transacción), <code>p_merchant</code> (<em>Comerciante</em>), <code>p_card</code> (nombre de la <em>Tarjeta o pase</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
+          <li>Haz un pago de prueba. En un minuto aparece en <strong>Gastos por revisar</strong>.</li>
+        </ol>
+      </details>
+    </section>
+    <section>
+      <h3>Reglas por comercio</h3>
+      <ul id="ruleList" class="rule-list"></ul>
+      <p class="hint" id="ruleHint"></p>
     </section>
     <section>
       <h3>Moneda</h3>

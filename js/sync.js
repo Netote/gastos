@@ -59,18 +59,37 @@ export async function updatePassword(password){
   const {error} = await client.auth.updateUser({password});
   if (error) throw error; history.replaceState(null, '', location.pathname); recovery = false;
 }
+/* ---------- Token para registrar gastos desde Apple Pay (ver supabase/schema.sql) ---------- */
+async function rpc(name){
+  if (!client || !user) throw new Error('Inicia sesión para continuar.');
+  const {data, error} = await client.rpc(name);
+  if (error) throw error; return data;
+}
+/** Fecha (ISO) del token actual, o null si no hay. */
+export const walletTokenInfo = () => rpc('ingest_token_info');
+/** Crea o reemplaza el token; el valor solo se obtiene en este momento. */
+export const createWalletToken = () => rpc('create_ingest_token');
+export const revokeWalletToken = () => rpc('revoke_ingest_token');
+export const apiConfig = () => ({url:SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/rpc/ingest_wallet', key:SUPABASE_KEY});
+
 export async function signOut(){ user = null; pulledOnce = false; await client.auth.signOut(); }
 
 const PAGE = 1000;
 // Columnas que la app escribe en cada tabla (las demás las pone el servidor).
 const COLS = {
-  transactions:['id', 'type', 'category', 'amount', 'date', 'description', 'recurring_id', 'created', 'deleted'],
+  transactions:['id', 'type', 'category', 'amount', 'date', 'description', 'recurring_id', 'created', 'source', 'merchant', 'card', 'review', 'deleted'],
   budgets:['id', 'amount', 'deleted'],
   goals:['id', 'name', 'target', 'saved', 'deadline', 'color', 'deleted'],
   recurring:['id', 'name', 'type', 'category', 'amount', 'day', 'start_month', 'occurrences', 'active', 'deleted'],
-  settings:['id', 'currency', 'deleted']
+  settings:['id', 'currency', 'deleted'],
+  merchant_rules:['id', 'name', 'category', 'deleted']
 };
-const toRow = (table, rec) => { const row = {user_id:user.id}; for (const c of COLS[table]) row[c] = rec[c] === undefined ? null : rec[c]; return row; };
+const toRow = (table, rec) => {
+  const row = {user_id:user.id};
+  for (const c of COLS[table]) row[c] = rec[c] === undefined ? null : rec[c];
+  if (table === 'transactions') row.review = rec.review === true; // la columna no admite null
+  return row;
+};
 async function push(){
   for (const table of store.TABLES){
     const entries = store.dirtyEntries(table);

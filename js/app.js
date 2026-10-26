@@ -148,6 +148,13 @@ function renderInsights(){
       (near.length ? near.map(b => esc(catOf(b.id).name)).join(', ') + (near.length > 1 ? ' están' : ' está') + ' por arriba del 80%. ' : '') + '<a href="#presupuestos">Revisar</a></p>'));
   }
 
+  const cards = U.byCard(list).slice(0, 4);
+  if (cards.length){
+    const total = U.sums(list).exp;
+    out.push(item('card', '', 'Gasto por tarjeta',
+      '<ul class="upcoming">' + cards.map(([name, v]) => '<li><span>' + esc(name) + '</span><span>' + money(v) + (total ? ' <small>(' + pf.format(v / total * 100) + '%)</small>' : '') + '</span></li>').join('') + '</ul>'));
+  }
+
   const up = rules.map(rr => ({r:rr, n:U.nextDue(rr, t)})).filter(x => x.r.active && x.n && x.n.date <= U.addMonths(t.slice(0, 7), 1) + t.slice(7))
     .sort((a, b) => a.n.date < b.n.date ? -1 : 1).slice(0, 4);
   out.push(item('calendar', '', 'Próximos fijos', up.length
@@ -226,7 +233,7 @@ function renderFlow(C){
   });
 }
 function renderResumen(){
-  renderKPIs(); renderInsights();
+  renderReview(); renderKPIs(); renderInsights();
   if (charts.available()){ const C = charts.palette(); renderDonut(C); renderBars(C); renderFlow(C); }
   else ['#donutWrap', '#barsBox', '#flowBox'].forEach(s => { $(s).hidden = true; });
   const recent = store.all('transactions').sort(cmpDateDesc).slice(0, 5);
@@ -248,12 +255,43 @@ function filteredTx(){
   list.sort((a, b) => s === 'amt-desc' ? b.amount - a.amount : s === 'amt-asc' ? a.amount - b.amount : s === 'date-asc' ? -cmpDateDesc(a, b) : cmpDateDesc(a, b));
   return list;
 }
-function txRow(t, withDate){
+function txBtn(t, withDate){
   const c = catOf(t.category), title = t.description || c.name, sign = t.type === 'income' ? '+' : '−';
-  return '<li><button type="button" class="tx" data-tx="' + esc(t.id) + '" style="--c:' + c.color + '" aria-label="' + esc(title) + ', ' + (t.type === 'income' ? 'ingreso' : 'gasto') + ' de ' + money(t.amount) + ', ' + U.fmtDate(t.date) + '. Editar">' +
+  const lead = t.recurring_id ? ico('repeat', 12) : t.source === 'wallet' ? ico('device', 12) : '';
+  return '<button type="button" class="tx" data-tx="' + esc(t.id) + '" style="--c:' + c.color + '" aria-label="' + esc(title) + ', ' + (t.type === 'income' ? 'ingreso' : 'gasto') + ' de ' + money(t.amount) + ', ' + U.fmtDate(t.date) + (t.review ? ', por revisar' : '') + '. Editar">' +
     '<span class="catdot">' + ico(c.icon, 20) + '</span>' +
-    '<span class="tx-main"><span class="tx-title" style="display:block">' + esc(title) + '</span><span class="tx-meta">' + (t.recurring_id ? ico('repeat', 12) : '') + esc(c.name) + (withDate ? ' · ' + U.fmtDate(t.date) : '') + '</span></span>' +
-    '<span class="tx-amt ' + t.type + '">' + sign + money(t.amount) + '</span></button></li>';
+    '<span class="tx-main"><span class="tx-title" style="display:block">' + esc(title) + '</span><span class="tx-meta">' + lead + esc(c.name) + (withDate ? ' · ' + U.fmtDate(t.date) : '') + (t.card ? ' · ' + esc(t.card) : '') + (t.review ? ' <span class="badge warn">Por revisar</span>' : '') + '</span></span>' +
+    '<span class="tx-amt ' + t.type + '">' + sign + money(t.amount) + '</span></button>';
+}
+const txRow = (t, withDate) => '<li>' + txBtn(t, withDate) + '</li>';
+
+/* ---------- Bandeja "por revisar" (gastos que llegan solos desde Apple Pay) ---------- */
+const REVIEW_SHOWN = 6;
+const pendingReview = () => store.all('transactions').filter(t => t.review).sort(cmpDateDesc);
+function renderReview(){
+  const list = pendingReview(), box = $('#reviewCard');
+  box.hidden = !list.length; if (!list.length) return;
+  $('#reviewTitle').textContent = list.length === 1 ? '1 gasto por revisar' : list.length + ' gastos por revisar';
+  $('#reviewList').innerHTML = list.slice(0, REVIEW_SHOWN).map(t =>
+    '<li class="rv">' + txBtn(t, true) + '<button type="button" class="icon-btn" data-confirm="' + esc(t.id) + '" aria-label="Confirmar ' + esc(t.description || catOf(t.category).name) + ' tal como está" title="Confirmar">' + ico('check', 20) + '</button></li>').join('');
+  $('#reviewMore').textContent = list.length > REVIEW_SHOWN ? 'Y ' + (list.length - REVIEW_SHOWN) + ' más. Confirma los que ya revisaste para ver el resto.' : '';
+  $('#reviewMore').hidden = list.length <= REVIEW_SHOWN;
+}
+function confirmReview(ids){
+  const prev = ids.map(id => store.get('transactions', id)).filter(Boolean).map(t => t.id);
+  prev.forEach(id => store.put('transactions', {id, review:false}));
+  if (prev.length) toast(prev.length === 1 ? 'Gasto confirmado' : prev.length + ' gastos confirmados', 'Deshacer', () => prev.forEach(id => store.put('transactions', {id, review:true})));
+}
+/** Guarda «este comercio → esta categoría» y la aplica a los demás pendientes del mismo comercio. Devuelve cuántos actualizó. */
+function learnRule(merchant, category){
+  const key = U.merchantKey(merchant); if (!key) return 0;
+  const name = merchant.replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim(); // sin el número de sucursal
+  store.put('merchant_rules', {id:key.slice(0, 60), name:name.slice(0, 60), category});
+  let n = 0;
+  for (const t of pendingReview()){
+    if (t.type === 'expense' && t.merchant && U.merchantKey(t.merchant) === key){ store.put('transactions', {id:t.id, category, review:false}); n++; }
+  }
+  return n;
 }
 const emptyTx = () => '<li class="empty">' + ico('inbox', 28) + (store.all('transactions').length === 0 ? 'Aún no tienes movimientos. Toca «Agregar» para registrar tu primer ingreso o gasto.' : 'No hay movimientos con estos filtros.') + '</li>';
 function renderList(){
@@ -393,6 +431,12 @@ function openTx(id, preset){
   $('#fAmount').value = t ? (t.amount / 100).toFixed(2) : '';
   $('#fDate').value = t ? t.date : (isCurrentMonth() ? today() : viewKey() + '-01');
   $('#fDesc').value = t ? t.description || '' : '';
+  $('#fCard').value = t ? t.card || '' : '';
+  $('#cardList').innerHTML = [...new Set(store.all('transactions').map(x => x.card).filter(Boolean))].sort().map(c => '<option value="' + esc(c) + '"></option>').join('');
+  // «Recordar comercio» solo aplica a gastos que traen comercio (los de Wallet).
+  const canLearn = !!(t && t.merchant && t.type === 'expense' && U.merchantKey(t.merchant));
+  $('#fRememberRow').hidden = !canLearn; $('#fRemember').checked = canLearn && !!t.review;
+  if (canLearn) $('#fRememberTxt').textContent = 'Recordar: cuando el comercio sea «' + t.merchant + '», usar esta categoría';
   Object.keys(txRules).forEach(k => setErr(k, '')); $('#errSummary').hidden = true;
   $('#txTitle').textContent = t ? 'Editar movimiento' : 'Nuevo movimiento';
   $('#fDelete').hidden = !t;
@@ -413,10 +457,13 @@ function submitTx(){
     box.hidden = false; box.focus(); return;
   }
   box.hidden = true;
-  const rec = {type:txType, category:$('input[name="fcat"]:checked').value, date:$('#fDate').value, amount:U.toCents(U.parseAmount($('#fAmount').value)), description:$('#fDesc').value.trim().slice(0, 120)};
+  const rec = {type:txType, category:$('input[name="fcat"]:checked').value, date:$('#fDate').value, amount:U.toCents(U.parseAmount($('#fAmount').value)), description:$('#fDesc').value.trim().slice(0, 120), card:$('#fCard').value.trim().slice(0, 40) || null};
   const [y, m] = rec.date.split('-').map(Number); view.y = y; view.m = m - 1;
   if (txEditing){
-    store.put('transactions', Object.assign({id:txEditing}, rec)); closeDlg(txDlg()); toast('Cambios guardados');
+    const orig = store.get('transactions', txEditing);
+    store.put('transactions', Object.assign({id:txEditing, review:false}, rec)); closeDlg(txDlg());
+    const learned = orig && !$('#fRememberRow').hidden && $('#fRemember').checked && txType === 'expense' ? learnRule(orig.merchant, rec.category) : -1;
+    toast(learned < 0 ? 'Cambios guardados' : 'Comercio recordado' + (learned ? ' · se actualizaron ' + learned + ' más' : ''));
   } else {
     const t = store.put('transactions', Object.assign({id:U.uid(), recurring_id:null, created:Date.now()}, rec));
     closeDlg(txDlg());
@@ -503,15 +550,15 @@ function download(name, data, type){
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function toCSV(){
-  const rows = [['fecha', 'tipo', 'categoria', 'descripcion', 'monto', 'fijo']];
+  const rows = [['fecha', 'tipo', 'categoria', 'descripcion', 'monto', 'fijo', 'tarjeta']];
   store.all('transactions').sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-    .forEach(t => rows.push([t.date, t.type === 'income' ? 'ingreso' : 'gasto', catOf(t.category).name, t.description || '', (t.amount / 100).toFixed(2), t.recurring_id ? 'sí' : '']));
+    .forEach(t => rows.push([t.date, t.type === 'income' ? 'ingreso' : 'gasto', catOf(t.category).name, t.description || '', (t.amount / 100).toFixed(2), t.recurring_id ? 'sí' : '', t.card || '']));
   return '﻿' + rows.map(r => r.map(U.csvCell).join(',')).join('\r\n');
 }
 function toJSON(){
   const strip = r => { const {deleted, updated_at, created, ...x} = r; return x; };
   return JSON.stringify({app:'gastos', version:2, exportado:new Date().toISOString(), nota:'Montos en centavos', currency:store.settings().currency,
-    transactions:store.all('transactions').map(strip), budgets:store.all('budgets').map(strip), goals:store.all('goals').map(strip), recurring:store.all('recurring').map(strip)}, null, 2);
+    transactions:store.all('transactions').map(strip), budgets:store.all('budgets').map(strip), goals:store.all('goals').map(strip), recurring:store.all('recurring').map(strip), merchant_rules:store.all('merchant_rules').map(strip)}, null, 2);
 }
 let pendingImport = null;
 function parseBackup(text){
@@ -529,10 +576,13 @@ function parseBackup(text){
   const recurring = (Array.isArray(d.recurring) ? d.recurring : []).filter(r => r && okId(r.id) && typeof r.name === 'string' && (r.type === 'income' || r.type === 'expense') && CAT[r.category] && CAT[r.category].type === r.type && Number.isInteger(r.amount) && r.amount > 0 && Number.isInteger(r.day) && r.day >= 1 && r.day <= 31 && /^\d{4}-\d{2}-\d{2}$/.test(r.start_month))
     .map(r => ({id:r.id, name:r.name.slice(0, 60), type:r.type, category:r.category, amount:r.amount, day:r.day, start_month:r.start_month.slice(0, 7) + '-01', occurrences:Number.isInteger(r.occurrences) && r.occurrences > 0 ? r.occurrences : null, active:r.active !== false}));
   const currency = ['MXN', 'USD', 'EUR'].includes(d.currency) ? d.currency : null;
-  return {tx, budgets, goals, recurring, currency, skipped};
+  const rules = Array.isArray(d.merchant_rules) ? d.merchant_rules.filter(r => r && typeof r.id === 'string' && r.id.length >= 1 && r.id.length <= 60 && CAT[r.category] && CAT[r.category].type === 'expense')
+    .map(r => ({id:r.id, name:String(r.name || '').slice(0, 60), category:r.category})) : null; // null = el respaldo no trae reglas: se conservan las actuales
+  return {tx, budgets, goals, recurring, rules, currency, skipped};
 }
 function applyImport(p){
   store.replaceTable('transactions', p.tx); store.replaceTable('budgets', p.budgets); store.replaceTable('goals', p.goals); store.replaceTable('recurring', p.recurring);
+  if (p.rules) store.replaceTable('merchant_rules', p.rules);
   if (p.currency) store.put('settings', {id:'main', currency:p.currency});
   makeNF();
 }
@@ -572,7 +622,53 @@ function renderAccount(){
   info.innerHTML = 'Sesión: <strong>' + esc(u ? u.email : '—') + '</strong><br>Última sincronización: ' + last + (pend ? ' · ' + pend + ' cambios por subir' : '') + (s.state === 'error' ? '<br><span class="err">' + esc(s.error) + '</span>' : '');
   btns.innerHTML = '<button type="button" class="btn" id="syncNow">' + ico('refresh', 18) + '<span>Sincronizar ahora</span></button><button type="button" class="btn" id="logoutBtn">' + ico('logout', 18) + '<span>Cerrar sesión</span></button>';
 }
+/* ---------- Apple Pay (Wallet) ---------- */
+const wallet = {date:undefined, token:null, busy:false, error:''};
+const walletErr = e => /Could not find the function|schema cache/i.test(e && e.message || '') ? 'Falta actualizar la base de datos: ejecuta de nuevo supabase/schema.sql en Supabase.' : (e && e.message) || String(e);
+async function refreshWallet(){
+  if (!sync.enabled || !sync.currentUser()) return;
+  try { wallet.date = await sync.walletTokenInfo(); wallet.error = ''; } catch(e){ wallet.error = walletErr(e); }
+  renderWallet();
+}
+function renderWallet(){
+  $('#walletSec').hidden = !sync.enabled; if (!sync.enabled) return;
+  const info = $('#walletInfo'), btns = $('#walletBtns'), has = !!wallet.date;
+  if (wallet.error) info.innerHTML = '<span class="err">' + esc(wallet.error) + '</span>';
+  else if (wallet.date === undefined) info.textContent = 'Consultando…';
+  else info.textContent = has ? 'Activo desde el ' + new Date(wallet.date).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'}) + '. Cada pago con Apple Pay se registra solo.' : 'Desactivado. Actívalo para que tus pagos con Apple Pay se registren solos, con monto y comercio.';
+  const off = wallet.busy || wallet.date === undefined;
+  btns.innerHTML = has
+    ? '<button type="button" class="btn" id="walletNew"' + (off ? ' disabled' : '') + '>' + ico('refresh', 18) + '<span>Generar token nuevo</span></button><button type="button" class="btn danger" id="walletOff"' + (off ? ' disabled' : '') + '>Desactivar</button>'
+    : '<button type="button" class="btn primary" id="walletNew"' + (off || wallet.error ? ' disabled' : '') + '>' + ico('plus', 18) + '<span>Activar registro con Apple Pay</span></button>';
+  const secret = $('#walletSecret'); secret.hidden = !wallet.token;
+  if (wallet.token){ const c = sync.apiConfig(); $('#wUrl').value = c.url; $('#wKey').value = c.key; $('#wToken').value = wallet.token; }
+}
+async function walletAction(kind){
+  if (wallet.busy) return;
+  if (kind === 'new' && wallet.date && !confirm('El token anterior dejará de funcionar y tendrás que actualizarlo en tu atajo. ¿Continuar?')) return;
+  if (kind === 'off' && !confirm('Tus pagos con Apple Pay dejarán de registrarse hasta que lo actives de nuevo. ¿Desactivar?')) return;
+  wallet.busy = true; wallet.error = ''; renderWallet();
+  try {
+    if (kind === 'new'){ wallet.token = await sync.createWalletToken(); wallet.date = new Date().toISOString(); }
+    else { await sync.revokeWalletToken(); wallet.token = null; wallet.date = null; toast('Registro con Apple Pay desactivado'); }
+  } catch(e){ wallet.error = walletErr(e); }
+  wallet.busy = false; renderWallet();
+}
+async function copyField(id, btn){
+  const el = $('#' + id);
+  try { await navigator.clipboard.writeText(el.value); } catch(e){ el.select(); document.execCommand && document.execCommand('copy'); }
+  const old = btn.textContent; btn.textContent = 'Copiado'; setTimeout(() => { btn.textContent = old; }, 1500);
+}
+
+/* ---------- Reglas por comercio ---------- */
+function renderRules(){
+  const rules = store.all('merchant_rules').sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
+  $('#ruleList').innerHTML = rules.map(r => '<li><span class="rule-name">' + esc(r.name || r.id) + '</span><span class="rule-cat">→ ' + esc(catOf(r.category).name) + '</span><button type="button" class="icon-btn" data-rule-del="' + esc(r.id) + '" aria-label="Olvidar la regla de ' + esc(r.name || r.id) + '" title="Olvidar">' + ico('trash', 18) + '</button></li>').join('');
+  $('#ruleHint').textContent = rules.length ? 'Los pagos de estos comercios se categorizan solos.' : 'Aún no hay reglas. Al revisar un gasto de Apple Pay, marca «Recordar» y la próxima vez llegará ya categorizado.';
+}
+
 function openSettings(){
+  renderRules(); renderWallet(); refreshWallet();
   $('#curSel').value = store.settings().currency; $('#impMsg').textContent = ''; $('#impConfirm').hidden = true; pendingImport = null;
   const hasTx = store.all('transactions').length > 0;
   $('#seedBtn').disabled = hasTx; $('#seedBtn').title = hasTx ? 'Solo disponible sin movimientos registrados' : '';
@@ -666,6 +762,10 @@ function bind(){
     const tx = e.target.closest('[data-tx]'); if (tx){ openTx(tx.dataset.tx); return; }
     const lg = e.target.closest('[data-cat]');
     if (lg){ filters.cat = lg.dataset.cat; filters.type = 'all'; filters.allMonths = false; $('#qCat').value = filters.cat; $('#qType').value = 'all'; $('#qAll').checked = false; location.hash = '#movimientos'; return; }
+    const cf = e.target.closest('[data-confirm]'); if (cf){ confirmReview([cf.dataset.confirm]); return; }
+    if (e.target.closest('#confirmAll')){ confirmReview(pendingReview().map(t => t.id)); return; }
+    const rd = e.target.closest('[data-rule-del]');
+    if (rd){ const r = store.remove('merchant_rules', rd.dataset.ruleDel); if (r) toast('Regla olvidada', 'Deshacer', () => store.put('merchant_rules', Object.assign({}, r))); return; }
     const g = e.target.closest('[data-goal]'); if (g){ openGoal(g.dataset.goal); return; }
     const c = e.target.closest('[data-contrib]'); if (c){ openContrib(c.dataset.contrib); return; }
     const r = e.target.closest('[data-rec]'); if (r){ openRec(r.dataset.rec); return; }
@@ -733,6 +833,9 @@ function bind(){
   };
   $('#setDlg').addEventListener('click', async e => {
     if (e.target.closest('#syncNow')){ await sync.sync(); renderAccount(); }
+    if (e.target.closest('#walletNew')) walletAction('new');
+    if (e.target.closest('#walletOff')) walletAction('off');
+    const cp = e.target.closest('[data-copy]'); if (cp) copyField(cp.dataset.copy, cp);
     if (e.target.closest('#installBtn') && installEvt){ installEvt.prompt(); installEvt = null; $('#installHint').innerHTML = ''; }
     if (e.target.closest('#logoutBtn')){
       const pend = store.pendingCount();
@@ -740,6 +843,7 @@ function bind(){
       await sync.signOut(); store.wipeLocal(); closeDlg($('#setDlg')); showAuth();
     }
   });
+  $('#setDlg').addEventListener('close', () => { wallet.token = null; renderWallet(); }); // el token solo se muestra una vez
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
 
   // Acceso
@@ -762,7 +866,7 @@ async function init(){
   $('#qCat').innerHTML = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
   renderThemeBtn(); bind();
   store.onChange(origin => {
-    render(); if ($('#setDlg').open) renderAccount();
+    render(); if ($('#setDlg').open){ renderAccount(); renderRules(); }
     if (origin === 'local') sync.soon();
     else setTimeout(generateRecurring); // pudieron llegar fijos nuevos desde otro dispositivo
   });

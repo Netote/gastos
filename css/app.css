@@ -289,6 +289,27 @@ dialog.dlg::backdrop{ background:var(--scrim); backdrop-filter:blur(3px); }
 .dlg label{ font-size:.875rem; }
 .confirm{ margin-top:var(--s-3); padding:var(--s-3); border:1px solid var(--warn); border-radius:var(--r-md); display:grid; gap:var(--s-2); font-size:.875rem; }
 
+/* ---------- Por revisar, Wallet y reglas ---------- */
+.review{ margin-bottom:var(--s-4); border-color:var(--warn); }
+.review .card-head{ margin-bottom:6px; }
+.rv{ display:grid; grid-template-columns:1fr 44px; align-items:center; }
+.rv .tx{ min-width:0; }
+.rv .icon-btn{ color:var(--income); border-color:var(--border); }
+.review .badge{ display:none; }
+.badge.warn{ background:transparent; border:1px solid var(--warn); color:var(--warn); padding:0 6px; }
+.remember{ margin:0 0 var(--s-3); align-items:flex-start; }
+.remember input{ margin-top:2px; }
+.copy{ display:grid; gap:2px; }
+.copy-row{ display:flex; gap:var(--s-2); }
+.copy-row input{ flex:1; min-width:0; min-height:44px; padding:0 12px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--field-bg); font-size:.8125rem; }
+.steps{ margin:var(--s-2) 0 0; padding-left:20px; display:grid; gap:var(--s-2); color:var(--muted); }
+.steps strong,.steps code{ color:var(--text); }
+.steps code{ font-size:.8125rem; word-break:break-all; }
+.rule-list{ list-style:none; margin:0; padding:0; font-size:.875rem; }
+.rule-list li{ display:flex; align-items:center; gap:var(--s-2); border-bottom:1px solid var(--border); }
+.rule-name{ font-weight:500; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rule-cat{ color:var(--muted); white-space:nowrap; }
+
 /* ---------- Toast ---------- */
 .toast{ position:fixed; left:50%; bottom:calc(16px + var(--safe-b)); transform:translate(-50%, 20px); opacity:0; pointer-events:none; z-index:60; display:flex; align-items:center; gap:var(--s-3); width:max-content; max-width:min(520px, calc(100% - 24px)); padding:8px 8px 8px 16px; border-radius:14px; background:var(--text); color:var(--bg); box-shadow:0 12px 32px rgba(0,0,0,.3); transition:opacity .2s ease, transform .2s ease; }
 .toast.show{ opacity:1; transform:translate(-50%, 0); pointer-events:auto; }

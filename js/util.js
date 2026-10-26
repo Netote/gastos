@@ -3,6 +3,11 @@
 export const pad = n => String(n).padStart(2, '0');
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+/**
+ * Clave estable de un comercio: sin acentos, signos ni números sueltos ("OXXO 1234 CDMX" → "oxxo cdmx").
+ * Debe coincidir con merchant_key() de supabase/schema.sql.
+ */
+export const merchantKey = s => norm(s).replace(/[^a-z0-9]+/g, ' ').replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
 export const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 export const uid = () => (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
@@ -68,6 +73,13 @@ export const catOf = id => CAT[id] || {id, name:id, type:'expense', color:'#94A3
 /* ---------- Cálculos ---------- */
 export function sums(list){ let inc = 0, exp = 0; for (const t of list){ if (t.type === 'income') inc += t.amount; else exp += t.amount; } return {inc, exp, net:inc - exp}; }
 export function byCategory(list, type = 'expense'){ const o = {}; for (const t of list){ if (t.type === type) o[t.category] = (o[t.category] || 0) + t.amount; } return o; }
+
+/** Gasto por método de pago (tarjeta); los movimientos sin tarjeta se omiten. Ordenado de mayor a menor. */
+export function byCard(list){
+  const o = {};
+  for (const t of list){ if (t.type === 'expense' && t.card) o[t.card] = (o[t.card] || 0) + t.amount; }
+  return Object.entries(o).sort((a, b) => b[1] - a[1]);
+}
 
 /** Fecha de cobro de una regla recurrente en un mes dado (día ajustado al último día del mes). */
 export function dueDate(rule, key){ const {y, m} = parseKey(key); return key + '-' + pad(Math.min(rule.day, daysIn(y, m))); }
@@ -160,5 +172,8 @@ export function cleanTx(t){
   if (!ok) return null;
   const id = typeof t.id === 'string' && /^[\w-]{1,64}$/.test(t.id) ? t.id : uid();
   return {id, type:t.type, category:t.category, date:t.date, amount:t.amount, description:String(desc || '').slice(0, 120),
-    recurring_id:typeof t.recurring_id === 'string' && /^[\w-]{1,64}$/.test(t.recurring_id) ? t.recurring_id : null};
+    recurring_id:typeof t.recurring_id === 'string' && /^[\w-]{1,64}$/.test(t.recurring_id) ? t.recurring_id : null,
+    card:typeof t.card === 'string' && t.card.trim() ? t.card.trim().slice(0, 40) : null,
+    merchant:typeof t.merchant === 'string' && t.merchant.trim() ? t.merchant.trim().slice(0, 60) : null,
+    source:t.source === 'wallet' ? 'wallet' : null, review:t.review === true};
 }
