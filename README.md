@@ -5,6 +5,7 @@ Funciona en computadora y celular (se instala como app), sin conexión, y sincro
 
 ## Funciones
 
+- **Saldo actual:** cuánto dinero tienes hoy. Lo ajustas una vez con lo que traes y después se actualiza solo con cada ingreso, gasto o pago de Apple Pay. Los movimientos con fecha futura no cuentan hasta su día.
 - **Resumen del mes:** ingresos, gastos, balance y tasa de ahorro, con comparación contra el mes anterior.
 - **Indicadores:**
   - proyección de cierre de mes (gastos fijos más el ritmo de los variables);

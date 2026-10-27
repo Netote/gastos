@@ -103,6 +103,10 @@ alter table public.transactions add column if not exists merchant text    check 
 alter table public.transactions add column if not exists card     text    check (card is null or char_length(card) <= 40);
 alter table public.transactions add column if not exists review   boolean not null default false; -- true = pendiente de revisar
 
+-- Saldo inicial: lo que tenías al ajustar el saldo. Saldo actual = opening_balance + ingresos - gastos (en centavos).
+alter table public.settings add column if not exists opening_balance bigint not null default 0;
+alter table public.settings add column if not exists opening_date    date; -- día del último ajuste (null = nunca)
+
 do $$
 declare t text;
 begin

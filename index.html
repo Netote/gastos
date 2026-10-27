@@ -94,6 +94,14 @@
   <!-- Resumen -->
   <section class="view" id="v-resumen" data-view="resumen" aria-labelledby="h-resumen">
     <h1 class="sr-only" id="h-resumen">Resumen del mes</h1>
+    <section id="balCard" class="card bal" aria-labelledby="balTitle">
+      <div class="bal-main">
+        <h2 id="balTitle" class="bal-label">Saldo actual</h2>
+        <p id="balValue" class="bal-value"></p>
+        <p id="balSub" class="bal-sub"></p>
+      </div>
+      <button type="button" id="balBtn" class="btn"><span data-ico="pencil:18"></span><span>Ajustar saldo</span></button>
+    </section>
     <section id="reviewCard" class="card review" aria-labelledby="reviewTitle" hidden>
       <div class="card-head">
         <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay. Toca uno para corregirlo o confirma con la palomita.</p></div>
@@ -266,6 +274,23 @@
       <p class="hint" id="cHint"></p>
     </div>
     <div class="dlg-foot"><button type="submit" class="btn primary grow" id="cSubmit">Abonar</button></div>
+  </form>
+</dialog>
+
+<!-- Ajustar saldo -->
+<dialog id="balDlg" class="dlg sheet" aria-labelledby="balDlgTitle">
+  <form id="balForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="balDlgTitle">Ajustar saldo</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div class="field">
+        <label for="bAmount">¿Cuánto dinero tienes ahora?</label>
+        <div class="prefix big"><span class="cur-sym">$</span><input id="bAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+        <p class="err" id="bAmountErr" hidden></p>
+      </div>
+      <p class="hint" id="bHint"></p>
+      <p class="hint">Suma lo que traes en efectivo y en tus cuentas. Desde aquí el saldo se actualiza solo con cada ingreso y gasto. Los movimientos ya registrados no se modifican.</p>
+    </div>
+    <div class="dlg-foot"><button type="submit" class="btn primary grow" id="bSubmit">Guardar saldo</button></div>
   </form>
 </dialog>
 

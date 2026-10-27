@@ -130,3 +130,24 @@ test('cleanTx conserva tarjeta y comercio, y recorta longitudes', () => {
   const plain = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, source:'otro', review:'yes'});
   assert.equal(plain.source, null); assert.equal(plain.review, false); assert.equal(plain.card, null);
 });
+
+test('balanceNow suma saldo inicial, ingresos y gastos hasta hoy', () => {
+  const list = [
+    {type:'income', amount:100000, date:'2026-10-20'}, {type:'expense', amount:30000, date:'2026-10-25'},
+    {type:'expense', amount:5000, date:'2026-10-26'}, {type:'income', amount:999999, date:'2026-10-27'} // futuro: no cuenta
+  ];
+  assert.equal(U.balanceNow(50000, list, '2026-10-26'), 115000);
+  assert.equal(U.balanceNow(0, list, '2026-10-26'), 65000);
+  assert.equal(U.balanceNow(undefined, [], '2026-10-26'), 0);
+  assert.equal(U.balanceNow(-20000, [{type:'income', amount:5000, date:'2026-10-01'}], '2026-10-26'), -15000);
+});
+
+test('parseSigned acepta cero y negativos', () => {
+  assert.equal(U.parseSigned('1,250.50'), 1250.5);
+  assert.equal(U.parseSigned('-300'), -300);
+  assert.equal(U.parseSigned('−45.5'), -45.5);
+  assert.equal(U.parseSigned('0'), 0);
+  assert.ok(Number.isNaN(U.parseSigned('')));
+  assert.ok(Number.isNaN(U.parseSigned('-')));
+  assert.ok(Number.isNaN(U.parseSigned('abc')));
+});

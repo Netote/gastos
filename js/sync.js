@@ -81,13 +81,14 @@ const COLS = {
   budgets:['id', 'amount', 'deleted'],
   goals:['id', 'name', 'target', 'saved', 'deadline', 'color', 'deleted'],
   recurring:['id', 'name', 'type', 'category', 'amount', 'day', 'start_month', 'occurrences', 'active', 'deleted'],
-  settings:['id', 'currency', 'deleted'],
+  settings:['id', 'currency', 'opening_balance', 'opening_date', 'deleted'],
   merchant_rules:['id', 'name', 'category', 'deleted']
 };
 const toRow = (table, rec) => {
   const row = {user_id:user.id};
   for (const c of COLS[table]) row[c] = rec[c] === undefined ? null : rec[c];
   if (table === 'transactions') row.review = rec.review === true; // la columna no admite null
+  if (table === 'settings') row.opening_balance = Number.isInteger(rec.opening_balance) ? rec.opening_balance : 0; // ídem
   return row;
 };
 async function push(){

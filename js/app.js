@@ -94,7 +94,7 @@ function delta(cur, prev, goodWhenUp){
   return {txt:(up ? '+' : '−') + pf.format(Math.abs(p)) + '% vs. mes anterior', cls:good ? 'good' : 'bad', icon:up ? 'up' : 'down'};
 }
 function renderKPIs(){
-  const key = viewKey(), cur = U.sums(store.byMonth(key)), prev = U.sums(store.byMonth(U.addMonths(key, -1))), total = U.sums(store.all('transactions')).net;
+  const key = viewKey(), cur = U.sums(store.byMonth(key)), prev = U.sums(store.byMonth(U.addMonths(key, -1)));
   const rate = cur.inc > 0 ? cur.net / cur.inc * 100 : null;
   const dI = delta(cur.inc, prev.inc, true), dE = delta(cur.exp, prev.exp, false), dB = delta(cur.net, prev.net, true);
   const subD = d => '<p class="kpi-sub ' + d.cls + '">' + (d.icon ? ico(d.icon, 14) : '') + '<span>' + d.txt + '</span></p>';
@@ -102,7 +102,7 @@ function renderKPIs(){
   $('#kpis').innerHTML =
     card('income', 'Ingresos', 'inflow', money(cur.inc), '', subD(dI)) +
     card('expense', 'Gastos', 'outflow', money(cur.exp), '', subD(dE)) +
-    card('balance', 'Balance del mes', 'wallet', money(cur.net), cur.net < 0 ? 'neg' : '', subD(dB) + '<p class="kpi-sub">Saldo acumulado: ' + money(total) + '</p>') +
+    card('balance', 'Balance del mes', 'wallet', money(cur.net), cur.net < 0 ? 'neg' : '', subD(dB)) +
     card('rate', 'Tasa de ahorro', 'percent', rate === null ? '—' : pf.format(rate) + '%', rate !== null && rate < 0 ? 'neg' : '', '<p class="kpi-sub">' + (rate === null ? 'Sin ingresos este mes' : rate < 0 ? 'Gastaste más de lo que ingresaste' : rate >= 20 ? 'Vas arriba del 20% recomendado' : 'Meta sugerida: 20% o más') + '</p>');
 }
 
@@ -233,7 +233,7 @@ function renderFlow(C){
   });
 }
 function renderResumen(){
-  renderReview(); renderKPIs(); renderInsights();
+  renderBalance(); renderReview(); renderKPIs(); renderInsights();
   if (charts.available()){ const C = charts.palette(); renderDonut(C); renderBars(C); renderFlow(C); }
   else ['#donutWrap', '#barsBox', '#flowBox'].forEach(s => { $(s).hidden = true; });
   const recent = store.all('transactions').sort(cmpDateDesc).slice(0, 5);
@@ -264,6 +264,36 @@ function txBtn(t, withDate){
     '<span class="tx-amt ' + t.type + '">' + sign + money(t.amount) + '</span></button>';
 }
 const txRow = (t, withDate) => '<li>' + txBtn(t, withDate) + '</li>';
+
+/* ---------- Saldo actual ---------- */
+const currentBalance = () => U.balanceNow(store.settings().opening_balance, store.all('transactions'), today());
+function renderBalance(){
+  const set = store.settings(), bal = currentBalance(), el = $('#balValue');
+  el.textContent = money(bal); el.classList.toggle('neg', bal < 0);
+  $('#balSub').textContent = set.opening_date ? 'Ajustado el ' + U.fmtDate(set.opening_date) + ' · se actualiza con cada movimiento' : 'Toca «Ajustar saldo» e indica cuánto tienes hoy para empezar.';
+}
+const balInput = () => U.parseSigned($('#bAmount').value);
+function renderBalHint(){
+  const n = balInput(), hint = $('#bHint');
+  if (!Number.isFinite(n)){ hint.textContent = ''; return; }
+  const diff = U.toCents(n) - currentBalance();
+  hint.textContent = diff === 0 ? 'Coincide con lo que calcula la app.' : 'La app calcula ' + money(currentBalance()) + '. Se ajustará ' + (diff > 0 ? '+' : '−') + money(Math.abs(diff)) + '.';
+}
+function openBalance(){
+  $('#bAmount').value = U.centsToInput(currentBalance()); setErr('bAmount', ''); renderBalHint();
+  openDlg($('#balDlg')); setTimeout(() => { $('#bAmount').focus(); $('#bAmount').select(); }, 50);
+}
+function submitBalance(){
+  const n = balInput();
+  if (!Number.isFinite(n) || Math.abs(n) > 999999999.99){ setErr('bAmount', 'Escribe tu saldo (puede ser 0 o negativo, por ejemplo 1250.50).'); $('#bAmount').focus(); return; }
+  setErr('bAmount', '');
+  const prev = store.settings(), before = {opening_balance:prev.opening_balance || 0, opening_date:prev.opening_date || null};
+  // El saldo inicial es lo que falta para que ingresos y gastos ya registrados den el saldo indicado.
+  const opening = U.toCents(n) - U.balanceNow(0, store.all('transactions'), today());
+  store.put('settings', {id:'main', currency:prev.currency, opening_balance:opening, opening_date:today()});
+  closeDlg($('#balDlg'));
+  toast('Saldo ajustado a ' + money(U.toCents(n)), 'Deshacer', () => store.put('settings', Object.assign({id:'main', currency:store.settings().currency}, before)));
+}
 
 /* ---------- Bandeja "por revisar" (gastos que llegan solos desde Apple Pay) ---------- */
 const REVIEW_SHOWN = 6;
@@ -557,7 +587,7 @@ function toCSV(){
 }
 function toJSON(){
   const strip = r => { const {deleted, updated_at, created, ...x} = r; return x; };
-  return JSON.stringify({app:'gastos', version:2, exportado:new Date().toISOString(), nota:'Montos en centavos', currency:store.settings().currency,
+  return JSON.stringify({app:'gastos', version:2, exportado:new Date().toISOString(), nota:'Montos en centavos', currency:store.settings().currency, opening_balance:store.settings().opening_balance || 0, opening_date:store.settings().opening_date || null,
     transactions:store.all('transactions').map(strip), budgets:store.all('budgets').map(strip), goals:store.all('goals').map(strip), recurring:store.all('recurring').map(strip), merchant_rules:store.all('merchant_rules').map(strip)}, null, 2);
 }
 let pendingImport = null;
@@ -578,12 +608,13 @@ function parseBackup(text){
   const currency = ['MXN', 'USD', 'EUR'].includes(d.currency) ? d.currency : null;
   const rules = Array.isArray(d.merchant_rules) ? d.merchant_rules.filter(r => r && typeof r.id === 'string' && r.id.length >= 1 && r.id.length <= 60 && CAT[r.category] && CAT[r.category].type === 'expense')
     .map(r => ({id:r.id, name:String(r.name || '').slice(0, 60), category:r.category})) : null; // null = el respaldo no trae reglas: se conservan las actuales
-  return {tx, budgets, goals, recurring, rules, currency, skipped};
+  const opening = Number.isInteger(d.opening_balance) && Math.abs(d.opening_balance) <= 99999999999 ? {opening_balance:d.opening_balance, opening_date:/^\d{4}-\d{2}-\d{2}$/.test(d.opening_date) ? d.opening_date : null} : null;
+  return {tx, budgets, goals, recurring, rules, currency, opening, skipped};
 }
 function applyImport(p){
   store.replaceTable('transactions', p.tx); store.replaceTable('budgets', p.budgets); store.replaceTable('goals', p.goals); store.replaceTable('recurring', p.recurring);
   if (p.rules) store.replaceTable('merchant_rules', p.rules);
-  if (p.currency) store.put('settings', {id:'main', currency:p.currency});
+  if (p.currency || p.opening) store.put('settings', Object.assign({id:'main', currency:p.currency || store.settings().currency}, p.opening || {}));
   makeNF();
 }
 
@@ -751,6 +782,11 @@ function bind(){
     d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close]')) closeDlg(d); });
   });
 
+  // Saldo
+  $('#balBtn').onclick = openBalance;
+  $('#bAmount').addEventListener('input', renderBalHint);
+  $('#balForm').addEventListener('submit', e => { e.preventDefault(); submitBalance(); });
+
   // Movimiento
   pickTxType = bindSeg($('#typeSeg'), t => { const changed = txType !== t; txType = t; if (changed && $('#fCats').children.length) renderCatGrid(t); renderTxSubmit(); });
   $('#txForm').addEventListener('submit', e => { e.preventDefault(); submitTx(); });
@@ -829,6 +865,7 @@ function bind(){
     if (!wb.dataset.armed){ wb.dataset.armed = '1'; wb.textContent = '¿Seguro? Pulsa de nuevo'; wipeT = setTimeout(() => { delete wb.dataset.armed; wb.textContent = 'Borrar todo'; }, 4000); return; }
     clearTimeout(wipeT); delete wb.dataset.armed; wb.textContent = 'Borrar todo';
     store.TABLES.forEach(t => store.all(t).forEach(r => { if (t !== 'settings') store.remove(t, r.id); }));
+    store.put('settings', {id:'main', currency:store.settings().currency, opening_balance:0, opening_date:null});
     closeDlg($('#setDlg')); toast('Se borraron todos los datos');
   };
   $('#setDlg').addEventListener('click', async e => {

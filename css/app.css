@@ -289,6 +289,13 @@ dialog.dlg::backdrop{ background:var(--scrim); backdrop-filter:blur(3px); }
 .dlg label{ font-size:.875rem; }
 .confirm{ margin-top:var(--s-3); padding:var(--s-3); border:1px solid var(--warn); border-radius:var(--r-md); display:grid; gap:var(--s-2); font-size:.875rem; }
 
+/* ---------- Saldo actual ---------- */
+.bal{ display:flex; align-items:center; justify-content:space-between; gap:var(--s-3); flex-wrap:wrap; margin-bottom:var(--s-4); }
+.bal-label{ font-size:.875rem; font-weight:500; color:var(--muted); }
+.bal-value{ font-size:2rem; font-weight:700; line-height:1.15; letter-spacing:-.01em; }
+.bal-value.neg{ color:var(--expense); }
+.bal-sub{ color:var(--muted); font-size:.8125rem; margin-top:2px; }
+
 /* ---------- Por revisar, Wallet y reglas ---------- */
 .review{ margin-bottom:var(--s-4); border-color:var(--warn); }
 .review .card-head{ margin-bottom:6px; }

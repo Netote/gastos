@@ -72,6 +72,17 @@ export const catOf = id => CAT[id] || {id, name:id, type:'expense', color:'#94A3
 
 /* ---------- Cálculos ---------- */
 export function sums(list){ let inc = 0, exp = 0; for (const t of list){ if (t.type === 'income') inc += t.amount; else exp += t.amount; } return {inc, exp, net:inc - exp}; }
+/** Saldo a hoy: saldo inicial + ingresos - gastos con fecha hasta hoy (lo futuro todavía no cuenta). */
+export function balanceNow(opening, list, today){
+  let n = Number.isInteger(opening) ? opening : 0;
+  for (const t of list){ if (t.date > today) continue; n += t.type === 'income' ? t.amount : -t.amount; }
+  return n;
+}
+/** Interpreta un saldo que puede ser cero o negativo ("-1,200.50"); NaN si no es válido. */
+export function parseSigned(str){
+  const s = String(str).trim(), neg = /^[-−]/.test(s), n = parseAmount(neg ? s.slice(1) : s);
+  return neg ? -n : n;
+}
 export function byCategory(list, type = 'expense'){ const o = {}; for (const t of list){ if (t.type === type) o[t.category] = (o[t.category] || 0) + t.amount; } return o; }
 
 /** Gasto por método de pago (tarjeta); los movimientos sin tarjeta se omiten. Ordenado de mayor a menor. */
