@@ -102,15 +102,17 @@ La sesión queda guardada; solo inicias sesión una vez por dispositivo.
 
 Una página web no puede leer tu Wallet, pero la app **Atajos** del iPhone sí: con una *automatización de transacción* se ejecuta cada vez que pagas con Apple Pay y manda el monto y el comercio a tu Supabase.
 
-**Requisitos:** iOS 17 o posterior y pagar con el iPhone o el Apple Watch (no aplica a la tarjeta física ni a compras en línea con los datos de la tarjeta).
+**Requisitos:** iPhone con iOS 17 o posterior (los pasos de abajo son los de iOS 27; en versiones anteriores el disparador se llama *Transacción* o *Wallet* y está en la pestaña Automatización) y pagar con el iPhone o el Apple Watch (no aplica a la tarjeta física ni a compras en línea con los datos de la tarjeta).
 
 1. **Actualiza la base de datos:** vuelve a ejecutar `supabase/schema.sql` en el SQL Editor de Supabase (es idempotente) **antes** de publicar esta versión de la app.
 2. En la app: **Ajustes → Apple Pay (Wallet) → Activar**. Se muestra la URL, la clave pública y tu **token secreto** (solo se ve una vez).
-3. En el iPhone: **Atajos → Automatización → + → Transacción**, elige tus tarjetas y activa *Ejecutar inmediatamente*.
-4. Agrega **Obtener contenido de URL** con método **POST**:
+3. En el iPhone (**iOS 27**): abre **Atajos → Nuevo atajo**. Ya no hay pestaña de automatizaciones: el disparador es un bloque del propio atajo. Agrega **When Any Card is tapped** y elige tus tarjetas (si no lo encuentras, descríbelo en *Describe a shortcut*: «cuando pague con Apple Pay»). Verifica que corra solo, sin pedir confirmación.
+4. Agrega **Get contents of** (URL) con método **POST**:
    - URL: la que muestra la app (`…/rest/v1/rpc/ingest_wallet`).
-   - Encabezados: `apikey` = la clave pública, `Content-Type` = `application/json`.
-   - Cuerpo JSON (todos Texto): `p_token` = tu token, `p_amount` = *Monto*, `p_merchant` = *Comerciante*, `p_card` = nombre de la *Tarjeta o pase*, y opcional `p_date` = fecha actual con formato `yyyy-MM-dd`.
+   - Headers: `apikey` = la clave pública, `Content-Type` = `application/json`. Sin filas vacías.
+   - Request Body → JSON: `p_token` = tu token, `p_amount` = *Amount*, `p_merchant` = *Merchant*, `p_card` = *Card or Pass*, y opcional `p_date` = fecha actual con formato `yyyy-MM-dd`.
+   - **Pega el token a mano en el editor**; no lo escribas en la caja de Siri.
+   - Prueba sin pagar: toca ▶ (con **Show Content** al final para ver la respuesta). Debe decir `invalid amount`: el servidor aceptó todo y solo rechazó el monto vacío. Quita **Show Content** después.
 5. Haz un pago de prueba: en un minuto aparece en **Gastos por revisar**.
 
 Cómo funciona y qué esperar:
@@ -119,7 +121,7 @@ Cómo funciona y qué esperar:
 - Las reglas ignoran los números de sucursal: «OXXO 4521 CDMX» y «OXXO 77 CDMX» son el mismo comercio.
 - Los reembolsos (montos negativos) se rechazan; si el mismo cargo llega dos veces en menos de 45 segundos, se ignora el duplicado.
 - Si no mandas `p_date`, se usa la fecha de Ciudad de México.
-- Los nombres exactos de las variables de la transacción (*Monto*, *Comerciante*, *Tarjeta o pase*) pueden variar un poco según la versión de iOS. Si el monto llega vacío con algún banco, el registro falla y Atajos lo muestra: el gasto se captura a mano.
+- Las variables del disparador son *Amount*, *Merchant* y *Card or Pass*. Si alguna llega vacía, el registro falla y Atajos lo muestra: el gasto se captura a mano.
 
 ## Mantenimiento
 

@@ -341,13 +341,15 @@
         <div class="copy"><label for="wToken">Tu token secreto</label><div class="copy-row"><input id="wToken" readonly><button type="button" class="btn sm" data-copy="wToken">Copiar</button></div></div>
       </div>
       <details class="details">
-        <summary>Cómo armar el atajo en el iPhone</summary>
+        <summary>Cómo armar el atajo en el iPhone (iOS 27)</summary>
         <ol class="steps">
-          <li>Abre <strong>Atajos → Automatización → +</strong> y elige <strong>Transacción</strong>. Selecciona tus tarjetas y activa <strong>Ejecutar inmediatamente</strong>.</li>
-          <li>Agrega la acción <strong>Obtener contenido de URL</strong>. En <em>URL</em> pega la dirección de arriba y cambia el método a <strong>POST</strong>.</li>
-          <li>En <em>Encabezados</em> agrega <code>apikey</code> con la clave pública y <code>Content-Type</code> con <code>application/json</code>.</li>
-          <li>En <em>Cuerpo de la solicitud</em> elige <strong>JSON</strong> y agrega estos campos de tipo Texto: <code>p_token</code> (tu token), <code>p_amount</code> (variable <em>Monto</em> de la transacción), <code>p_merchant</code> (<em>Comerciante</em>), <code>p_card</code> (nombre de la <em>Tarjeta o pase</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
-          <li>Haz un pago de prueba. En un minuto aparece en <strong>Gastos por revisar</strong>.</li>
+          <li>Abre <strong>Atajos</strong> y crea un atajo nuevo (<strong>Nuevo atajo</strong>). En iOS 27 las automatizaciones ya no tienen pestaña aparte: el disparador es un bloque dentro del atajo.</li>
+          <li>Agrega el disparador <strong>When Any Card is tapped</strong> («cuando se toca cualquier tarjeta») y elige tus tarjetas. Si no lo encuentras, descríbelo en <em>Describe a shortcut</em>: «cuando pague con Apple Pay con cualquier tarjeta». Revisa que se ejecute solo y no pida confirmación.</li>
+          <li>Agrega la acción <strong>Get contents of</strong> (URL). Pega la dirección de arriba y cambia <em>Method</em> a <strong>POST</strong>.</li>
+          <li>En <em>Headers</em> agrega <code>apikey</code> con la clave pública y <code>Content-Type</code> con <code>application/json</code>. No dejes filas vacías.</li>
+          <li>En <em>Request Body</em> elige <strong>JSON</strong> y agrega estos campos: <code>p_token</code> (pega tu token como texto), <code>p_amount</code> (variable <em>Amount</em>), <code>p_merchant</code> (<em>Merchant</em>), <code>p_card</code> (<em>Card or Pass</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
+          <li><strong>No escribas el token en la caja de Siri ni en «Describe a shortcut»:</strong> pégalo a mano en el editor.</li>
+          <li>Para probar sin pagar, toca ▶: debe responder <code>invalid amount</code> (el servidor aceptó todo y solo rechazó el monto vacío). Con un pago real, el gasto aparece en <strong>Gastos por revisar</strong> en un minuto.</li>
         </ol>
       </details>
     </section>
