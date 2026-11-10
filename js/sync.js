@@ -5,10 +5,14 @@
  *   2) se descargan las filas con updated_at posterior al último cursor.
  * El servidor fija updated_at con un trigger, así que el cursor no depende del reloj del teléfono.
  */
-import {SUPABASE_URL, SUPABASE_KEY} from './config.js';
+import {SUPABASE_URL, SUPABASE_KEY, APP_URL} from './config.js';
 import * as store from './store.js';
 
 export const enabled = !!(SUPABASE_URL && SUPABASE_KEY);
+/** true dentro de la app de iPhone (Capacitor); false en el navegador o la PWA. */
+export const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+// Dentro de la app el origen es capacitor://localhost, que no sirve en un correo: se usa la dirección web.
+const webBase = () => isNative() ? APP_URL : location.origin + location.pathname;
 // El enlace de "olvidé mi contraseña" vuelve a la app con type=recovery en la URL.
 let recovery = /type=recovery/.test(location.hash + location.search);
 export const isRecovery = () => recovery;
@@ -48,11 +52,11 @@ export async function signIn(email, password){
   if (error) throw error; return data.user;
 }
 export async function signUp(email, password){
-  const {data, error} = await client.auth.signUp({email, password, options:{emailRedirectTo:location.origin + location.pathname}});
+  const {data, error} = await client.auth.signUp({email, password, options:{emailRedirectTo:webBase()}});
   if (error) throw error; return {user:data.user, needsConfirm:!data.session};
 }
 export async function resetPassword(email){
-  const {error} = await client.auth.resetPasswordForEmail(email, {redirectTo:location.origin + location.pathname});
+  const {error} = await client.auth.resetPasswordForEmail(email, {redirectTo:webBase()});
   if (error) throw error;
 }
 export async function updatePassword(password){

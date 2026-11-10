@@ -2,3 +2,7 @@ node_modules/
 Notepad.txt
 *.log
 .DS_Store
+
+# Se generan al compilar la app de iPhone (ver README)
+www/
+ios/

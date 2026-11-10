@@ -22,6 +22,7 @@ Funciona en computadora y celular (se instala como app), sin conexión, y sincro
 - **Por revisar y reglas por comercio:** los gastos automáticos llegan a una bandeja; al corregir uno puedes recordar el comercio y los siguientes llegan ya categorizados.
 - **Método de pago:** cada gasto puede llevar su tarjeta, y el resumen muestra cuánto gastaste por tarjeta.
 - **Respaldo:** exportar a CSV o JSON e importar un JSON (también acepta el formato de la versión anterior).
+- **App de iPhone:** la misma app instalable en iPhone sin pagar, con sus límites (ver [App de iPhone](#app-de-iphone-gratis-sin-mac)).
 - **Uso diario:** tema claro y oscuro, PWA instalable y funcionamiento sin conexión.
 
 ## Arquitectura
@@ -122,6 +123,53 @@ Cómo funciona y qué esperar:
 - Los reembolsos (montos negativos) se rechazan; si el mismo cargo llega dos veces en menos de 45 segundos, se ignora el duplicado.
 - Si no mandas `p_date`, se usa la fecha de Ciudad de México.
 - Las variables del disparador son *Amount*, *Merchant* y *Card or Pass*. Si alguna llega vacía, el registro falla y Atajos lo muestra: el gasto se captura a mano.
+
+## App de iPhone (gratis, sin Mac)
+
+La misma app web, empaquetada con [Capacitor](https://capacitorjs.com) para instalarla como app de iPhone. Es el **mismo código**: no hay una segunda versión que mantener. Funciona sin conexión porque todos los archivos van dentro de la app, y sincroniza con Supabase igual que la web.
+
+**Lo que debes saber antes (límites de Apple, no de la app):**
+- Sin pagar el programa de desarrollador (99 USD/año), Apple firma la app solo **7 días**. Pasado ese plazo deja de abrir hasta que la vuelvas a firmar. Con cuenta gratuita también hay un tope de **3 apps** instaladas así.
+- No hay TestFlight ni App Store con cuenta gratuita.
+- Tus datos no corren riesgo: viven en Supabase, y la versión web (PWA) sigue funcionando todo el tiempo como respaldo.
+- Esta ruta **no se ha probado en un iPhone real todavía**: sigue la lista de verificación del final.
+
+### 1. Compilar la app (en la nube, sin Mac)
+1. En GitHub abre la pestaña **Actions → «App de iPhone (.ipa sin firmar)» → Run workflow**.
+2. Al terminar (unos 10 a 15 minutos), baja **Gastos-ipa** de la sección *Artifacts* y descomprime el `.zip`: dentro está `Gastos.ipa`.
+
+El flujo corre en una Mac de GitHub, no en la tuya. El repositorio es público, y en repos públicos GitHub no cobra los minutos de macOS (confírmalo en tu pestaña Actions). Si falla, la ejecución muestra la versión de Xcode y el paso exacto que falló.
+
+### 2. Instalarla desde Windows
+1. Instala **iTunes** e **iCloud** desde la página de Apple (no las versiones de Microsoft Store) y [Sideloadly](https://sideloadly.io).
+2. Conecta el iPhone por cable y acepta «Confiar en esta computadora».
+3. En el iPhone activa **Ajustes → Privacidad y seguridad → Modo de desarrollador** (pide reiniciar).
+4. Abre Sideloadly, arrastra `Gastos.ipa`, escribe tu Apple ID gratuito y pulsa **Start**.
+5. En el iPhone: **Ajustes → General → VPN y gestión de dispositivos →** tu Apple ID **→ Confiar**. Abre «Gastos» e inicia sesión con tu cuenta.
+
+### 3. Renovar cada 7 días
+Repite el paso 2.4 con el **mismo** `Gastos.ipa` y el **mismo** Apple ID, sin borrar la app antes. Sideloadly puede renovarla solo mientras tu PC esté encendida y el iPhone en la misma red. Si se te pasa el plazo, no pierdes nada: solo vuelve a firmarla.
+
+### Qué cambia respecto a la web
+- Los correos de confirmar cuenta y de recuperar contraseña abren la **versión web** (`APP_URL` en `js/config.js`). Ahí cambias la contraseña y luego entras a la app como siempre.
+- **Respaldo CSV/JSON** abre el menú de compartir de iOS (Archivos, AirDrop, correo…) en lugar de descargar.
+- Una vez al mes la app te recuerda guardar un respaldo JSON. La copia principal sigue siendo Supabase; el archivo no depende de ningún servicio.
+- La app pide al sistema que no borre los datos locales.
+
+### Para el desarrollo
+```bash
+npm run build:www   # arma www/ con los archivos web
+npx cap add ios     # genera ios/ (solo para inspeccionarlo; no se sube al repo)
+```
+Compilar y firmar exige macOS, por eso lo hace el flujo de GitHub. `www/` e `ios/` están en `.gitignore` porque se generan en cada compilación. Si cambias `appId` en `capacitor.config.json`, iOS la tratará como otra app distinta (no comparte datos locales con la anterior).
+
+### Lista de verificación en el iPhone (primera vez)
+- [ ] Se instala y abre; el icono es el de la billetera azul.
+- [ ] Inicia sesión y ve tus datos.
+- [ ] Modo avión: abre, crea un gasto; al volver la conexión aparece en la web.
+- [ ] **Respaldo JSON** abre el menú de compartir.
+- [ ] Las áreas seguras (muesca y barra inferior) no tapan botones.
+- [ ] Recuperar contraseña: llega el correo y el enlace abre la web.
 
 ## Mantenimiento
 

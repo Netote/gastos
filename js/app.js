@@ -574,10 +574,30 @@ function submitRec(){
 }
 
 /* ---------- Respaldo ---------- */
-function download(name, data, type){
+/** Guarda o comparte un archivo. En la app de iPhone abre el menú de compartir (los enlaces de descarga no funcionan ahí). */
+async function download(name, data, type){
+  if (sync.isNative()){
+    const {Filesystem, Share} = window.Capacitor.Plugins;
+    const f = await Filesystem.writeFile({path:name, data, directory:'CACHE', encoding:'utf8'});
+    await Share.share({title:name, url:f.uri});
+    return;
+  }
   const blob = new Blob([data], {type}), url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+/* Recordatorio de respaldo: la copia principal es la nube, pero un archivo propio no depende de ningún servicio. */
+const BACKUP_KEY = 'gastos:lastBackup', BACKUP_EVERY = 30 * 864e5;
+const markBackup = () => { try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch(e){} };
+const exportFile = (name, data, type, isBackup) => download(name, data, type).then(() => { if (isBackup) markBackup(); }).catch(e => { if (!/cancel/i.test(e && e.message || '')) toast('No se pudo exportar el archivo.'); });
+function remindBackup(){
+  try {
+    const last = Number(localStorage.getItem(BACKUP_KEY));
+    if (!last){ markBackup(); return; } // primera vez: el plazo empieza hoy
+    if (Date.now() - last < BACKUP_EVERY || !store.all('transactions').length) return;
+    setTimeout(() => toast('Hace más de un mes que no guardas un respaldo.', 'Respaldar', () => exportFile('gastos-respaldo-' + today() + '.json', toJSON(), 'application/json', true)), 4000);
+    markBackup(); // un solo aviso por mes, aunque no lo atiendas
+  } catch(e){}
 }
 function toCSV(){
   const rows = [['fecha', 'tipo', 'categoria', 'descripcion', 'monto', 'fijo', 'tarjeta']];
@@ -753,7 +773,7 @@ function showApp(){ $('#authView').hidden = true; $('#app').hidden = false; setR
 function showAuth(mode = 'login'){ $('#app').hidden = true; $('#authView').hidden = false; setAuthMode(mode); setTimeout(() => $(mode === 'newpass' ? '#aPass' : '#aEmail').focus(), 50); }
 async function onSignedIn(user){
   store.setOwner(user.id); makeNF(); showApp();
-  await sync.sync(); generateRecurring();
+  await sync.sync(); generateRecurring(); remindBackup();
 }
 
 /* ---------- Eventos ---------- */
@@ -843,8 +863,8 @@ function bind(){
 
   // Ajustes
   $('#curSel').onchange = e => { store.put('settings', {id:'main', currency:e.target.value}); makeNF(); charts.dropAll(); };
-  $('#expCsv').onclick = () => download('gastos-' + today() + '.csv', toCSV(), 'text/csv;charset=utf-8');
-  $('#expJson').onclick = () => download('gastos-respaldo-' + today() + '.json', toJSON(), 'application/json');
+  $('#expCsv').onclick = () => exportFile('gastos-' + today() + '.csv', toCSV(), 'text/csv;charset=utf-8');
+  $('#expJson').onclick = () => exportFile('gastos-respaldo-' + today() + '.json', toJSON(), 'application/json', true);
   $('#impFile').addEventListener('change', async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     const msg = $('#impMsg');
@@ -900,6 +920,7 @@ function bind(){
 async function init(){
   paintIcons();
   store.load(); makeNF();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); // pide que el sistema no borre los datos locales
   $('#qCat').innerHTML = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
   renderThemeBtn(); bind();
   store.onChange(origin => {
@@ -911,7 +932,7 @@ async function init(){
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  if (!sync.enabled){ showApp(); generateRecurring(); return; }
+  if (!sync.enabled){ showApp(); generateRecurring(); remindBackup(); return; }
   try {
     // Si la sesión caduca no se borran los datos locales: al volver a entrar se suben los pendientes.
     const user = await sync.init(u => { if (u && sync.isRecovery()) showAuth('newpass'); else if (u) onSignedIn(u); else showAuth(); });

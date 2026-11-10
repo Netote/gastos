@@ -1,0 +1,71 @@
+name: App de iPhone (.ipa sin firmar)
+
+# Compila la app en una Mac de GitHub (no necesitas una) y deja el .ipa como archivo descargable.
+# El .ipa sale SIN firmar: se firma en tu PC con Sideloadly y tu Apple ID gratuito (ver README).
+#
+# Cómo correrlo: GitHub → pestaña Actions → «App de iPhone» → Run workflow.
+# Al terminar, baja «Gastos-ipa» desde la sección Artifacts de esa ejecución.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-build]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Versión de Xcode (para diagnosticar)
+        run: xcodebuild -version
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Armar la carpeta web e iniciar el proyecto de iOS
+        run: |
+          node scripts/build-www.mjs
+          npx cap add ios
+          cp resources/icon-1024.png "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
+          npx cap sync ios
+
+      - name: Compilar sin firmar
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Empaquetar el .ipa
+        run: |
+          APP="build/Build/Products/Release-iphoneos/App.app"
+          test -d "$APP" || { echo "No se encontró $APP"; find build -name "*.app" -maxdepth 6; exit 1; }
+          mkdir Payload
+          cp -R "$APP" Payload/App.app
+          zip -qry Gastos.ipa Payload
+          ls -lh Gastos.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gastos-ipa
+          path: Gastos.ipa
+          retention-days: 14
+          if-no-files-found: error

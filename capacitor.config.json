@@ -1,0 +1,8 @@
+{
+  "appId": "com.netote.gastos",
+  "appName": "Gastos",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never"
+  }
+}

@@ -5,4 +5,6 @@
  * NUNCA pongas aquí la clave secret / service_role.
  */
 export const SUPABASE_URL = 'https://htbhocyphwuaahkmtkip.supabase.co';
+/* Dirección pública de la versión web. La app de iPhone la usa en los enlaces de los correos (confirmar cuenta, recuperar contraseña). */
+export const APP_URL = 'https://netote.github.io/gastos/';
 export const SUPABASE_KEY = 'sb_publishable_5Q5d30ukntGFX_fbUEqSsQ_eRJWsp-p';
