@@ -104,7 +104,7 @@
     </section>
     <section id="reviewCard" class="card review" aria-labelledby="reviewTitle" hidden>
       <div class="card-head">
-        <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay. Toca uno para corregirlo o confirma con la palomita.</p></div>
+        <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay o el aviso de tu banco. Toca uno para corregirlo o confirma con la palomita.</p></div>
         <button type="button" id="confirmAll" class="btn sm">Confirmar todos</button>
       </div>
       <ul id="reviewList" class="tx-list"></ul>
@@ -350,6 +350,17 @@
           <li>En <em>Request Body</em> elige <strong>JSON</strong> y agrega estos campos: <code>p_token</code> (pega tu token como texto), <code>p_amount</code> (variable <em>Amount</em>), <code>p_merchant</code> (<em>Merchant</em>), <code>p_card</code> (<em>Card or Pass</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
           <li><strong>No escribas el token en la caja de Siri ni en «Describe a shortcut»:</strong> pégalo a mano en el editor.</li>
           <li>Para probar sin pagar, toca ▶: debe responder <code>invalid amount</code> (el servidor aceptó todo y solo rechazó el monto vacío). Con un pago real, el gasto aparece en <strong>Gastos por revisar</strong> en un minuto.</li>
+        </ol>
+      </details>
+      <details class="details">
+        <summary>Respaldo: atajo con el aviso del banco (BBVA)</summary>
+        <p class="hint">El disparador de Wallet a veces no se ejecuta. El aviso que manda tu banco por cada compra también cubre tarjeta física y compras en línea. Si llegan los dos, se registra una sola vez.</p>
+        <ol class="steps">
+          <li>Crea otro atajo y agrega el disparador de <strong>notificación</strong> (iOS 27): elige la app de tu banco y, si te deja, filtra el mensaje con la palabra <code>Compra</code>.</li>
+          <li>Agrega <strong>Get contents of</strong> (URL) con método <strong>POST</strong>. La dirección es la misma de arriba pero terminada en <code>ingest_notification</code> en lugar de <code>ingest_wallet</code>.</li>
+          <li>Mismos encabezados: <code>apikey</code> y <code>Content-Type: application/json</code>.</li>
+          <li>Cuerpo JSON: <code>p_token</code> (tu token) y <code>p_text</code> (el <em>mensaje</em> de la notificación; si ofrece título aparte, mándalo en <code>p_title</code>). No hace falta que extraigas monto ni comercio: lo hace el servidor.</li>
+          <li>Solo se registran las <strong>compras</strong>; depósitos, retiros y promociones se ignoran sin error. Reenviar el mismo aviso no duplica.</li>
         </ol>
       </details>
     </section>

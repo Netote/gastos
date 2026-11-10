@@ -127,6 +127,8 @@ test('byCard suma gastos por tarjeta y omite los que no tienen', () => {
 test('cleanTx conserva tarjeta y comercio, y recorta longitudes', () => {
   const t = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, card:'  Nu  ', merchant:'x'.repeat(100), source:'wallet', review:true});
   assert.equal(t.card, 'Nu'); assert.equal(t.merchant.length, 60); assert.equal(t.source, 'wallet'); assert.equal(t.review, true);
+  const bank = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, source:'notif'});
+  assert.equal(bank.source, 'notif');
   const plain = U.cleanTx({type:'expense', category:'ocio', date:'2026-09-01', amount:100, source:'otro', review:'yes'});
   assert.equal(plain.source, null); assert.equal(plain.review, false); assert.equal(plain.card, null);
 });

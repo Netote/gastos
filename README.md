@@ -123,6 +123,24 @@ Cómo funciona y qué esperar:
 - Si no mandas `p_date`, se usa la fecha de Ciudad de México.
 - Las variables del disparador son *Amount*, *Merchant* y *Card or Pass*. Si alguna llega vacía, el registro falla y Atajos lo muestra: el gasto se captura a mano.
 
+### Respaldo: el aviso de tu banco
+
+El disparador de Wallet solo ve pagos físicos con NFC y a veces no se ejecuta. El aviso que el banco manda por **cada compra** cubre también tarjeta física y compras en línea, así que sirve como segunda fuente.
+
+1. **Vuelve a ejecutar `supabase/schema.sql`** en Supabase (agrega columnas y la función `ingest_notification`; es idempotente).
+2. En el iPhone crea **otro atajo** con el disparador de **notificación** (iOS 27) de la app de tu banco y la acción **Get contents of** (URL) con método **POST**, mismos encabezados que el atajo de Wallet y la dirección terminada en `/rest/v1/rpc/ingest_notification`.
+3. Cuerpo JSON: `p_token` (el mismo token) y `p_text` (el mensaje de la notificación). Opcional: `p_title` y `p_card`.
+
+El servidor extrae monto, comercio, tarjeta y fecha. Ejemplo reconocido (BBVA México):
+`Compra con TDD 1985 en ANTHROPIC* CLAUDE $349.00 10 noviembre 15:49h`
+
+- Solo se registran **compras**. Depósitos, transferencias, retiros, promociones, compras rechazadas, cancelaciones y devoluciones se ignoran sin error.
+- **No se duplica:** reenviar el mismo texto no crea otro gasto, y si Wallet y el aviso llegan por la misma compra (mismo monto, hasta 15 minutos de diferencia) queda una sola. Dos compras distintas del mismo monto se conservan como dos.
+- Si el comercio ya tiene una regla, llega categorizado. Si no, entra **por revisar**.
+- El aviso trae «10 noviembre» sin año: se toma el año en curso (si saliera en el futuro, el anterior).
+- Solo se probó con ese formato de aviso. Si el banco redacta otro tipo de compra distinto, se ignorará hasta agregar su formato en `ingest_notification`.
+- No se ha confirmado que el disparador de notificaciones de iOS 27 entregue el texto completo al atajo: se comprueba con una compra real.
+
 ## Mantenimiento
 
 - **Publicar cambios:** sube la versión en `VERSION` dentro de `sw.js` para que los celulares descarguen lo nuevo.

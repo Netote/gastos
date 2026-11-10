@@ -102,6 +102,10 @@ alter table public.transactions add column if not exists source   text    check 
 alter table public.transactions add column if not exists merchant text    check (merchant is null or char_length(merchant) <= 60);
 alter table public.transactions add column if not exists card     text    check (card is null or char_length(card) <= 40);
 alter table public.transactions add column if not exists review   boolean not null default false; -- true = pendiente de revisar
+-- Para no duplicar una misma compra que llega por dos caminos (Wallet y aviso del banco), y para reenviar sin duplicar.
+alter table public.transactions add column if not exists paired   boolean not null default false; -- true = ya se emparejó con la otra fuente
+alter table public.transactions add column if not exists ext_id   text    check (ext_id is null or char_length(ext_id) <= 64); -- huella del texto del aviso
+create unique index if not exists transactions_ext_idx on public.transactions (user_id, ext_id) where ext_id is not null;
 
 -- Saldo inicial: lo que tenías al ajustar el saldo. Saldo actual = opening_balance + ingresos - gastos (en centavos).
 alter table public.settings add column if not exists opening_balance bigint not null default 0;
@@ -217,6 +221,15 @@ begin
       and not deleted and created_at > now() - interval '45 seconds' limit 1;
   if v_dup is not null then return jsonb_build_object('id', v_dup, 'duplicate', true); end if;
 
+  -- Si el aviso del banco ya registró esta compra y aún no se emparejó, no se duplica: se marca como emparejada.
+  select id into v_dup from public.transactions
+    where user_id = v_user and source = 'notif' and not paired and not deleted and amount = v_amount
+      and created_at > now() - interval '15 minutes' order by created_at desc limit 1;
+  if v_dup is not null then
+    update public.transactions set paired = true where user_id = v_user and id = v_dup;
+    return jsonb_build_object('id', v_dup, 'duplicate', true, 'paired', true);
+  end if;
+
   select category into v_cat from public.merchant_rules where user_id = v_user and id = v_key and not deleted;
   v_review := v_cat is null;
   v_cat := coalesce(v_cat, 'otros-gasto');
@@ -232,3 +245,79 @@ revoke all on function public.create_ingest_token(), public.revoke_ingest_token(
   public.ingest_wallet(text, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.create_ingest_token(), public.revoke_ingest_token(), public.ingest_token_info() to authenticated;
 grant execute on function public.ingest_wallet(text, text, text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Registro desde el aviso del banco (notificación, SMS o correo)
+-- ---------------------------------------------------------------------------
+-- El atajo manda el texto tal como llegó; aquí se extraen monto, comercio, tarjeta y fecha. Así, si el banco cambia
+-- la redacción, se corrige en la base de datos sin tocar el atajo. Solo se registran COMPRAS; el resto se ignora
+-- sin error ({"ignored": true}). Ejemplo reconocido:
+--   «Compra con TDD 1985 en ANTHROPIC* CLAUDE $349.00 10 noviembre 15:49h»
+-- Es seguro reenviar el mismo texto: ext_id (huella del texto) evita duplicados.
+create or replace function public.ingest_notification(p_token text, p_text text, p_title text default '', p_card text default '')
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_user uuid; v_text text; v_m text[]; v_amount bigint; v_clean text; v_merchant text; v_card text; v_key text;
+  v_today date; v_date date; v_month int; v_day int; v_ext text; v_cat text; v_review boolean; v_id text; v_cand text;
+  v_months text[] := array['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+begin
+  select user_id into v_user from public.ingest_tokens where token_hash = sha256(convert_to(coalesce(p_token, ''), 'UTF8'));
+  if v_user is null then raise exception 'invalid token' using errcode = '28000'; end if;
+
+  v_text := left(regexp_replace(btrim(coalesce(nullif(btrim(p_text), ''), p_title, '')), '\s+', ' ', 'g'), 500);
+  if v_text = '' then return jsonb_build_object('ignored', true, 'reason', 'empty'); end if;
+  if v_text ~* '(rechaz|cancel|devoluci|reembols)' then return jsonb_build_object('ignored', true, 'reason', 'not_a_purchase'); end if;
+
+  v_m := regexp_match(v_text, 'compra\s+(?:con\s+)?(tdd|tdc|tarjeta\s+de\s+\w+)?\s*(\d{4})?\s*en\s+(.+?)\s+\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)(?:\s+(\d{1,2})\s+(?:de\s+)?([[:alpha:]]+))?', 'i');
+  if v_m is null then return jsonb_build_object('ignored', true, 'reason', 'no_match'); end if;
+
+  v_clean := replace(v_m[4], ',', '');
+  v_amount := round(v_clean::numeric * 100)::bigint;
+  if v_amount <= 0 or v_amount > 99999999999 then return jsonb_build_object('ignored', true, 'reason', 'bad_amount'); end if;
+
+  v_merchant := left(btrim(v_m[3]), 60);
+  v_card := left(coalesce(nullif(btrim(p_card), ''), concat_ws(' ', 'BBVA', upper(v_m[1]), v_m[2])), 40);
+  v_key := public.merchant_key(v_merchant);
+
+  -- Fecha: el aviso trae «10 noviembre» sin año. Se usa el año actual (hora de Ciudad de México); si saliera en el
+  -- futuro, es del año pasado.
+  v_today := (now() at time zone 'America/Mexico_City')::date;
+  v_date := v_today;
+  v_day := v_m[5]::int; v_month := array_position(v_months, lower(v_m[6]));
+  if v_day is not null and v_month is not null then
+    begin
+      v_date := make_date(extract(year from v_today)::int, v_month, v_day);
+      if v_date > v_today + 1 then v_date := make_date(extract(year from v_today)::int - 1, v_month, v_day); end if;
+    exception when others then v_date := v_today; -- día imposible (p. ej. 31 de febrero)
+    end;
+  end if;
+
+  v_ext := 'n_' || md5(v_text);
+  select id into v_id from public.transactions where user_id = v_user and ext_id = v_ext;
+  if v_id is not null then return jsonb_build_object('id', v_id, 'duplicate', true); end if;
+
+  -- Si Wallet ya registró esta compra y aún no se emparejó, no se duplica: se completa ese registro.
+  select id into v_cand from public.transactions
+    where user_id = v_user and source = 'wallet' and not paired and not deleted and amount = v_amount
+      and created_at > now() - interval '15 minutes' order by created_at desc limit 1;
+  if v_cand is not null then
+    update public.transactions
+      set paired = true, ext_id = v_ext, merchant = coalesce(merchant, nullif(v_merchant, '')), card = coalesce(card, nullif(v_card, ''))
+      where user_id = v_user and id = v_cand;
+    return jsonb_build_object('id', v_cand, 'duplicate', true, 'paired', true);
+  end if;
+
+  select category into v_cat from public.merchant_rules where user_id = v_user and id = v_key and not deleted;
+  v_review := v_cat is null;
+  v_cat := coalesce(v_cat, 'otros-gasto');
+
+  v_id := 'n_' || replace(gen_random_uuid()::text, '-', '');
+  insert into public.transactions (user_id, id, type, category, amount, date, description, created, source, merchant, card, review, ext_id)
+    values (v_user, v_id, 'expense', v_cat, v_amount, v_date, coalesce(nullif(v_merchant, ''), 'Compra'),
+            (extract(epoch from clock_timestamp()) * 1000)::bigint, 'notif', nullif(v_merchant, ''), nullif(v_card, ''), v_review, v_ext);
+  return jsonb_build_object('id', v_id, 'category', v_cat, 'review', v_review);
+end $$;
+
+revoke all on function public.ingest_notification(text, text, text, text) from public, anon, authenticated;
+grant execute on function public.ingest_notification(text, text, text, text) to anon, authenticated;

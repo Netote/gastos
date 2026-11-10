@@ -186,5 +186,5 @@ export function cleanTx(t){
     recurring_id:typeof t.recurring_id === 'string' && /^[\w-]{1,64}$/.test(t.recurring_id) ? t.recurring_id : null,
     card:typeof t.card === 'string' && t.card.trim() ? t.card.trim().slice(0, 40) : null,
     merchant:typeof t.merchant === 'string' && t.merchant.trim() ? t.merchant.trim().slice(0, 60) : null,
-    source:t.source === 'wallet' ? 'wallet' : null, review:t.review === true};
+    source:t.source === 'wallet' || t.source === 'notif' ? t.source : null, review:t.review === true};
 }

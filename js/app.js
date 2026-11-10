@@ -257,7 +257,7 @@ function filteredTx(){
 }
 function txBtn(t, withDate){
   const c = catOf(t.category), title = t.description || c.name, sign = t.type === 'income' ? '+' : '−';
-  const lead = t.recurring_id ? ico('repeat', 12) : t.source === 'wallet' ? ico('device', 12) : '';
+  const lead = t.recurring_id ? ico('repeat', 12) : t.source ? ico('device', 12) : '';
   return '<button type="button" class="tx" data-tx="' + esc(t.id) + '" style="--c:' + c.color + '" aria-label="' + esc(title) + ', ' + (t.type === 'income' ? 'ingreso' : 'gasto') + ' de ' + money(t.amount) + ', ' + U.fmtDate(t.date) + (t.review ? ', por revisar' : '') + '. Editar">' +
     '<span class="catdot">' + ico(c.icon, 20) + '</span>' +
     '<span class="tx-main"><span class="tx-title" style="display:block">' + esc(title) + '</span><span class="tx-meta">' + lead + esc(c.name) + (withDate ? ' · ' + U.fmtDate(t.date) : '') + (t.card ? ' · ' + esc(t.card) : '') + (t.review ? ' <span class="badge warn">Por revisar</span>' : '') + '</span></span>' +
