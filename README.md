@@ -22,6 +22,7 @@ Funciona en computadora y celular (se instala como app), sin conexión, y sincro
 - **Por revisar y reglas por comercio:** los gastos automáticos llegan a una bandeja; al corregir uno puedes recordar el comercio y los siguientes llegan ya categorizados.
 - **Método de pago:** cada gasto puede llevar su tarjeta, y el resumen muestra cuánto gastaste por tarjeta.
 - **Respaldo:** exportar a CSV o JSON e importar un JSON (también acepta el formato de la versión anterior).
+- **Diseño de vidrio:** superficies translúcidas con desenfoque, barra inferior flotante en el móvil y animaciones con resorte (entrada en cascada, contadores que ruedan, indicador de pestaña deslizante, diálogos). Ver [Diseño y animaciones](#diseño-y-animaciones).
 - **Uso diario:** tema claro y oscuro, PWA instalable y funcionamiento sin conexión.
 
 ## Arquitectura
@@ -140,6 +141,14 @@ El servidor extrae monto, comercio, tarjeta y fecha. Ejemplo reconocido (BBVA M�
 - El aviso trae «10 noviembre» sin año: se toma el año en curso (si saliera en el futuro, el anterior).
 - Solo se probó con ese formato de aviso. Si el banco redacta otro tipo de compra distinto, se ignorará hasta agregar su formato en `ingest_notification`.
 - No se ha confirmado que el disparador de notificaciones de iOS 27 entregue el texto completo al atajo: se comprueba con una compra real.
+
+## Diseño y animaciones
+
+- **Vidrio:** los tokens están al inicio de [css/app.css](css/app.css) (`--glass`, `--glass-strong`, `--edge-*`, `--orb*`). El fondo son cuatro manchas de color (`.bg`); el borde de luz de cada superficie es un degradado de 1 px con máscara.
+- **Animaciones:** [js/fx.js](js/fx.js) usa [Motion](https://motion.dev) (el motor de Framer Motion sin React), empaquetado en `vendor/motion.min.js` (MIT, ver `vendor/LICENSE-motion.txt`). Solo se animan `opacity` y `transform`. Si la librería no carga, la app funciona igual y sin movimiento.
+- **Accesibilidad:** se respetan «Reducir movimiento» (sin animaciones, números finales desde el primer instante), «Reducir transparencia» (superficies sólidas, sin desenfoque) y «Aumentar contraste». En las cuatro combinaciones de tema y tamaño, los textos cumplen WCAG AA (≥ 4.5:1), medidos contra el fondo real del vidrio; el peor caso fue 5.1:1.
+- **Rendimiento:** el fondo está quieto en el móvil. Mover algo detrás de tarjetas con desenfoque obliga a recalcular el desenfoque de todas en cada cuadro, y eso gasta batería. La deriva lenta de las manchas solo se activa en pantallas de 900 px o más con ratón.
+- **Si cambias colores:** vuelve a comprobar el contraste. Con vidrio, el color detrás del texto cambia al desplazarse, y los acentos (rojo, verde, naranja) son los primeros en fallar.
 
 ## Mantenimiento
 

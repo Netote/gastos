@@ -2,18 +2,30 @@ import * as U from './util.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as charts from './charts.js';
+import * as fx from './fx.js';
 import {ico, paintIcons} from './icons.js';
 
 const {esc, CAT, EXP, INC, catOf} = U;
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 
+/**
+ * Estos contenedores se repintan con cada cambio de datos (incluidos los de sincronización). Si el HTML nuevo es idéntico
+ * al anterior no se vuelve a escribir: así no parpadean, no se interrumpen las animaciones de entrada y se conserva el
+ * estado (hover, desplazamiento). Los de formularios (p. ej. presupuestos) no entran aquí a propósito.
+ */
+function skipSameHTML(el){
+  if (!el) return;
+  const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  Object.defineProperty(el, 'innerHTML', {configurable:true, get(){ return d.get.call(this); }, set(v){ if (this._html === v) return; this._html = v; d.set.call(this, v); }});
+}
+
 /* ---------- Estado de la interfaz ---------- */
 const now = U.todayParts();
 const view = {y:now.y, m:now.m};
 const filters = {q:'', type:'all', cat:'all', sort:'date-desc', allMonths:false};
 const VIEWS = ['resumen', 'movimientos', 'presupuestos', 'metas', 'fijos'];
-let route = 'resumen', listLimit = 80, renderQueued = false;
+let route = 'resumen', lastRoute = null, listLimit = 80, renderQueued = false;
 const today = () => U.todayStr();
 const viewKey = () => U.mk(view.y, view.m);
 const isCurrentMonth = () => viewKey() === today().slice(0, 7);
@@ -41,7 +53,7 @@ function renderThemeBtn(){
   const dark = currentTheme() === 'dark', b = $('#themeBtn');
   b.innerHTML = ico(dark ? 'sun' : 'moon'); b.setAttribute('aria-label', dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
   const forced = document.documentElement.getAttribute('data-theme');
-  $$('meta[name="theme-color"]').forEach(m => { if (!m.dataset.orig) m.dataset.orig = m.content; m.content = forced ? (dark ? '#0F172A' : '#EAF0FB') : m.dataset.orig; });
+  $$('meta[name="theme-color"]').forEach(m => { if (!m.dataset.orig) m.dataset.orig = m.content; m.content = forced ? (dark ? '#070B16' : '#E8EEFC') : m.dataset.orig; });
 }
 function setTheme(t){ document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('gastos:theme', t); } catch(e){} renderThemeBtn(); charts.dropAll(); render(); }
 
@@ -52,6 +64,7 @@ function renderNow(){
   renderPeriod(); renderSync(); renderBanner();
   $$('.cur-sym').forEach(s => s.textContent = curSymbol());
   ({resumen:renderResumen, movimientos:renderList, presupuestos:renderBudgets, metas:renderGoals, fijos:renderRecurring})[route]();
+  fx.counters($('.view[data-view="' + route + '"]'), money);
   $('#foot').textContent = !store.storageOk ? 'Tu navegador bloqueó el almacenamiento: exporta un respaldo desde «Datos y ajustes».'
     : sync.enabled ? 'Tus datos se guardan en este dispositivo y se sincronizan con tu cuenta.' : 'Tus datos se guardan solo en este dispositivo.';
 }
@@ -83,6 +96,10 @@ function setRoute(r, focus){
   $$('.view').forEach(v => v.hidden = v.dataset.view !== route);
   $$('.tabs a').forEach(a => { if (a.dataset.view === route) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   renderNow();
+  fx.moveIndicator($('.tabs'));
+  if (lastRoute !== route){ // entrada animada solo al cambiar de sección (no en cada repintado por datos)
+    const v = $('.view[data-view="' + route + '"]'); fx.enter(v); fx.counters(v, money, true); lastRoute = route;
+  }
   if (route === 'resumen') requestAnimationFrame(charts.resizeAll);
   if (focus){ window.scrollTo({top:0, behavior:'instant'}); $('#main').focus({preventScroll:true}); }
 }
@@ -98,11 +115,11 @@ function renderKPIs(){
   const rate = cur.inc > 0 ? cur.net / cur.inc * 100 : null;
   const dI = delta(cur.inc, prev.inc, true), dE = delta(cur.exp, prev.exp, false), dB = delta(cur.net, prev.net, true);
   const subD = d => '<p class="kpi-sub ' + d.cls + '">' + (d.icon ? ico(d.icon, 14) : '') + '<span>' + d.txt + '</span></p>';
-  const card = (cls, label, icon, val, valCls, sub) => '<article class="card kpi"><div class="kpi-top"><h2 class="sr-only">' + label + '</h2><span aria-hidden="true">' + label + '</span><span class="kpi-ico ' + cls + '">' + ico(icon, 18) + '</span></div><p class="kpi-val ' + valCls + '">' + val + '</p>' + sub + '</article>';
+  const card = (cls, label, icon, val, valCls, sub, cents, key) => '<article class="card kpi"><div class="kpi-top"><h2 class="sr-only">' + label + '</h2><span aria-hidden="true">' + label + '</span><span class="kpi-ico ' + cls + '">' + ico(icon, 18) + '</span></div><p class="kpi-val ' + valCls + '"' + (key ? ' data-count="' + cents + '" data-count-key="' + key + '"' : '') + '>' + val + '</p>' + sub + '</article>';
   $('#kpis').innerHTML =
-    card('income', 'Ingresos', 'inflow', money(cur.inc), '', subD(dI)) +
-    card('expense', 'Gastos', 'outflow', money(cur.exp), '', subD(dE)) +
-    card('balance', 'Balance del mes', 'wallet', money(cur.net), cur.net < 0 ? 'neg' : '', subD(dB)) +
+    card('income', 'Ingresos', 'inflow', money(cur.inc), '', subD(dI), cur.inc, 'kpi-inc') +
+    card('expense', 'Gastos', 'outflow', money(cur.exp), '', subD(dE), cur.exp, 'kpi-exp') +
+    card('balance', 'Balance del mes', 'wallet', money(cur.net), cur.net < 0 ? 'neg' : '', subD(dB), cur.net, 'kpi-net') +
     card('rate', 'Tasa de ahorro', 'percent', rate === null ? '—' : pf.format(rate) + '%', rate !== null && rate < 0 ? 'neg' : '', '<p class="kpi-sub">' + (rate === null ? 'Sin ingresos este mes' : rate < 0 ? 'Gastaste más de lo que ingresaste' : rate >= 20 ? 'Vas arriba del 20% recomendado' : 'Meta sugerida: 20% o más') + '</p>');
 }
 
@@ -172,7 +189,7 @@ function renderDonut(C){
   const has = total > 0;
   $('#donutWrap').hidden = !has; $('#donutEmpty').hidden = has;
   if (!has){ charts.drop('donut'); return; }
-  $('#donutTotal').textContent = money(total);
+  $('#donutTotal').textContent = money(total); $('#donutTotal').dataset.count = total; $('#donutTotal').dataset.countKey = 'donut';
   $('#legend').innerHTML = rows.map(([id, v]) => {
     const c = catOf(id), p = v / total * 100;
     return '<li><button type="button" class="lg-item" data-cat="' + esc(id) + '" style="--c:' + c.color + '" aria-label="Ver movimientos de ' + esc(c.name) + ': ' + money(v) + ', ' + pf.format(p) + '%"><span class="lg-dot" aria-hidden="true"></span><span>' + esc(c.name) + '</span><span class="lg-amt">' + money(v) + '</span><span class="lg-pct">' + pf.format(p) + '%</span></button></li>';
@@ -269,7 +286,7 @@ const txRow = (t, withDate) => '<li>' + txBtn(t, withDate) + '</li>';
 const currentBalance = () => U.balanceNow(store.settings().opening_balance, store.all('transactions'), today());
 function renderBalance(){
   const set = store.settings(), bal = currentBalance(), el = $('#balValue');
-  el.textContent = money(bal); el.classList.toggle('neg', bal < 0);
+  el.textContent = money(bal); el.dataset.count = bal; el.dataset.countKey = 'bal'; el.classList.toggle('neg', bal < 0);
   $('#balSub').textContent = set.opening_date ? 'Ajustado el ' + U.fmtDate(set.opening_date) + ' · se actualiza con cada movimiento' : 'Toca «Ajustar saldo» e indica cuánto tienes hoy para empezar.';
 }
 const balInput = () => U.parseSigned($('#bAmount').value);
@@ -433,8 +450,12 @@ function bindSeg(seg, onPick){
   });
   return pick;
 }
-function openDlg(d){ if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
-function closeDlg(d){ if (d.close) d.close(); else d.removeAttribute('open'); }
+function openDlg(d){ if (d.open) return; if (d.showModal) d.showModal(); else d.setAttribute('open', ''); fx.dialogIn(d); }
+function closeDlg(d){
+  if (!d.open || d._closing) return;
+  d._closing = true;
+  fx.dialogOut(d).then(() => { d._closing = false; fx.clear(d); if (d.close) d.close(); else d.removeAttribute('open'); });
+}
 function amountRule(id, opts = {}){
   const v = $('#' + id).value; if (!v.trim() && opts.optional) return '';
   const n = U.parseAmount(v); if (!(n > 0) || n > 999999999.99) return 'Escribe un monto mayor a 0 (por ejemplo, 250.50).'; return '';
@@ -750,7 +771,7 @@ async function submitAuth(){
   else if (okMsg){ ok.textContent = okMsg; ok.hidden = false; }
 }
 function showApp(){ $('#authView').hidden = true; $('#app').hidden = false; setRoute((location.hash || '#resumen').slice(1)); }
-function showAuth(mode = 'login'){ $('#app').hidden = true; $('#authView').hidden = false; setAuthMode(mode); setTimeout(() => $(mode === 'newpass' ? '#aPass' : '#aEmail').focus(), 50); }
+function showAuth(mode = 'login'){ $('#app').hidden = true; $('#authView').hidden = false; lastRoute = null; fx.enter($('#authView')); setAuthMode(mode); setTimeout(() => $(mode === 'newpass' ? '#aPass' : '#aEmail').focus(), 50); }
 async function onSignedIn(user){
   store.setOwner(user.id); makeNF(); showApp();
   await sync.sync(); generateRecurring();
@@ -898,11 +919,13 @@ function bind(){
 
 /* ---------- Inicio ---------- */
 async function init(){
-  paintIcons();
+  fx.init(); paintIcons();
+  ['#kpis', '#insights', '#recentList', '#legend', '#reviewList', '#txList', '#goalList', '#recList', '#recSummary'].forEach(sel => skipSameHTML($(sel)));
   store.load(); makeNF();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); // pide que el sistema no borre los datos locales
   $('#qCat').innerHTML = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
   renderThemeBtn(); bind();
+  { const nav = $('.tabs'); if (window.ResizeObserver) new ResizeObserver(() => fx.moveIndicator(nav, true)).observe(nav); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fx.moveIndicator(nav, true)); }
   store.onChange(origin => {
     render(); if ($('#setDlg').open){ renderAccount(); renderRules(); }
     if (origin === 'local') sync.soon();

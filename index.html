@@ -6,8 +6,8 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#EAF0FB" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E8EEFC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070B16" media="(prefers-color-scheme: dark)">
 <meta name="description" content="Control personal de ingresos, gastos, presupuestos y metas de ahorro.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -22,9 +22,11 @@
 <link rel="stylesheet" href="css/app.css">
 <script src="js/boot.js"></script>
 <script src="vendor/chart.umd.min.js" defer></script>
+<script src="vendor/motion.min.js" defer></script>
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
+<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 <noscript><p class="noscript">Esta aplicación necesita JavaScript para funcionar.</p></noscript>
 <a class="skip" href="#main">Saltar al contenido</a>
 
@@ -76,6 +78,7 @@
   </div>
   <nav class="tabs" aria-label="Secciones">
     <div class="wrap tabs-in">
+      <span class="tab-ind" aria-hidden="true"></span>
       <a href="#resumen" data-view="resumen"><span data-ico="dashboard"></span><span>Resumen</span></a>
       <a href="#movimientos" data-view="movimientos"><span data-ico="list"></span><span>Movimientos</span></a>
       <a href="#presupuestos" data-view="presupuestos"><span data-ico="pie"></span><span>Presupuestos</span></a>
