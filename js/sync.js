@@ -27,12 +27,28 @@ function loadLib(){
 }
 
 /** Inicia el cliente y devuelve el usuario con sesión guardada (o null). */
+const SLOW_START_MS = 3000;
+const isNetworkError = e => !!e && (e.name === 'AuthRetryableFetchError' || e.status === 0 || /fetch|network/i.test(e.message || ''));
+/** Usuario de la sesión guardada en este dispositivo (sin pedir nada a la red), o null. */
+export function storedUser(){
+  try { const s = JSON.parse(localStorage.getItem('gastos:auth')); return s && s.refresh_token && s.user && s.user.id ? s.user : null; }
+  catch(e){ return null; }
+}
+
 export async function init(onAuth){
   if (!enabled) return null;
   await loadLib();
   client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:'gastos:auth'}});
-  const {data} = await client.auth.getSession();
-  user = data.session ? data.session.user : null;
+  // Con la sesión caducada y sin red, Supabase reintenta renovarla durante mucho rato (pantalla en blanco) y luego
+  // devuelve un error de red que no es «no tienes sesión». En ese caso se abre la app con la cuenta guardada en el
+  // dispositivo: los datos locales se pueden usar y todo se sube cuando vuelva la conexión.
+  const pending = client.auth.getSession();
+  let res = await Promise.race([pending, new Promise(ok => setTimeout(() => ok(null), navigator.onLine === false ? 0 : SLOW_START_MS))]);
+  if (!res){ const saved = storedUser(); if (saved) user = saved; else res = await pending; }
+  if (res){
+    user = res.data.session ? res.data.session.user : null;
+    if (!user && isNetworkError(res.error)) user = storedUser();
+  }
   // Supabase recomienda no llamar a la API dentro de este callback: se difiere con setTimeout.
   client.auth.onAuthStateChange((event, session) => {
     const next = session ? session.user : null;
