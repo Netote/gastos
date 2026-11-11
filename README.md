@@ -1,29 +1,34 @@
 # Gastos · Control de ingresos y gastos
 
 App web personal para llevar ingresos, gastos, presupuestos, metas de ahorro y pagos fijos.
-Funciona en computadora y celular (se instala como app), sin conexión, y sincroniza tus datos entre dispositivos con tu cuenta.
+Funciona en computadora y celular (se instala como app), **sin conexión**, y sincroniza tus datos entre dispositivos con tu cuenta.
+Cada compra con tarjeta puede registrarse sola en tu iPhone a partir del aviso de tu banco.
+
+Versión publicada: https://netote.github.io/gastos/
 
 ## Funciones
 
-- **Saldo actual:** cuánto dinero tienes hoy. Lo ajustas una vez con lo que traes y después se actualiza solo con cada ingreso, gasto o pago de Apple Pay. Los movimientos con fecha futura no cuentan hasta su día.
+- **Saldo actual:** cuánto dinero tienes hoy. Lo ajustas una vez con lo que traes y después se actualiza solo con cada ingreso o gasto. Los movimientos con fecha futura no cuentan hasta su día.
 - **Resumen del mes:** ingresos, gastos, balance y tasa de ahorro, con comparación contra el mes anterior.
 - **Indicadores:**
   - proyección de cierre de mes (gastos fijos más el ritmo de los variables);
   - regla 50/30/20;
   - meses cubiertos por tu fondo de emergencia;
   - alertas de presupuesto al 80 %;
+  - gasto por tarjeta;
   - próximos pagos fijos.
 - **Gráficas:** gastos por categoría, ingresos contra gastos de los últimos 6 meses y flujo acumulado del mes.
 - **Movimientos:** búsqueda, filtros, agrupación por día, edición y eliminación con opción de deshacer.
 - **Presupuestos:** límite mensual por categoría.
 - **Metas de ahorro:** avance y monto sugerido por mes según la fecha límite.
 - **Fijos:** renta, suscripciones, quincena y meses sin intereses. Se registran solos el día que toca y se detienen al llegar al número de pagos.
-- **Apple Pay (iPhone):** cada pago con Wallet se registra solo, con monto, comercio y tarjeta (ver [Registro automático](#registro-automático-desde-apple-pay)).
+- **Registro automático (iPhone):** cada compra con tarjeta se registra sola desde el aviso de tu banco; los pagos con Apple Pay sirven de respaldo. Ver [Registro automático](#registro-automático-de-gastos-iphone).
 - **Por revisar y reglas por comercio:** los gastos automáticos llegan a una bandeja; al corregir uno puedes recordar el comercio y los siguientes llegan ya categorizados.
-- **Método de pago:** cada gasto puede llevar su tarjeta, y el resumen muestra cuánto gastaste por tarjeta.
+- **Método de pago:** cada gasto puede llevar su tarjeta.
 - **Respaldo:** exportar a CSV o JSON e importar un JSON (también acepta el formato de la versión anterior).
-- **Diseño de vidrio:** superficies translúcidas con desenfoque, barra inferior flotante en el móvil y animaciones con resorte (entrada en cascada, contadores que ruedan, indicador de pestaña deslizante, diálogos). Ver [Diseño y animaciones](#diseño-y-animaciones).
-- **Uso diario:** tema claro y oscuro, PWA instalable y funcionamiento sin conexión.
+- **Sin conexión:** abre, muestra tus datos y deja capturar gastos sin internet; todo se sube solo al volver la red. Funciona incluso si tu sesión caducó mientras no tenías conexión.
+- **Diseño de vidrio:** superficies translúcidas con desenfoque, barra inferior flotante en el móvil y animaciones con resorte. Ver [Diseño y animaciones](#diseño-y-animaciones).
+- **Uso diario:** tema claro y oscuro e instalación como app (PWA).
 
 ## Arquitectura
 
@@ -40,14 +45,18 @@ Navegador (GitHub Pages, archivos estáticos)
 
 ```
 index.html            Estructura y diálogos
-css/app.css           Estilos (tokens, modo oscuro, móvil)
+css/app.css           Estilos (tokens de vidrio, modo oscuro, móvil)
 js/app.js             Interfaz y eventos
+js/fx.js              Animaciones (Motion)
 js/util.js            Lógica pura: fechas, montos, indicadores (con pruebas)
 js/store.js           Almacén local y cola de cambios
 js/sync.js            Login y sincronización con Supabase
+js/charts.js          Gráficas (Chart.js)
+js/icons.js           Iconos
 js/config.js          ← aquí van tu URL y clave de Supabase
 sw.js                 Service worker (uso sin conexión)
-supabase/schema.sql   Tablas, índices, triggers y políticas RLS
+vendor/               Librerías propias del sitio: Chart.js, Supabase, Motion
+supabase/schema.sql   Tablas, índices, triggers, políticas RLS y funciones de registro automático
 tests/                Pruebas (npm test)
 ```
 
@@ -95,64 +104,108 @@ También se puede hacer desde GitHub: **Settings → Pages → Deploy from a bra
 ### 4. Instalar en el celular
 
 - **Android (Chrome):** abre la URL → menú ⋮ → *Instalar app*.
-- **iPhone (Safari):** abre la URL → Compartir → *Agregar a pantalla de inicio*.
+- **iPhone (Safari):** abre la URL → Compartir → *Agregar a pantalla de inicio*. Abre siempre la app desde ese icono.
 
 La sesión queda guardada; solo inicias sesión una vez por dispositivo.
 
-## Registro automático desde Apple Pay
+## Registro automático de gastos (iPhone)
 
-Una página web no puede leer tu Wallet, pero la app **Atajos** del iPhone sí: con una *automatización de transacción* se ejecuta cada vez que pagas con Apple Pay y manda el monto y el comercio a tu Supabase.
+Una página web no puede leer tu Wallet ni tus notificaciones, pero la app **Atajos** del iPhone sí. Un atajo envía el texto del aviso (o el pago) a una función de tu Supabase, que lo interpreta y crea el gasto en **Gastos por revisar**. Hay dos fuentes y conviene tener las dos:
 
-**Requisitos:** iPhone con iOS 17 o posterior (los pasos de abajo son los de iOS 27; en versiones anteriores el disparador se llama *Transacción* o *Wallet* y está en la pestaña Automatización) y pagar con el iPhone o el Apple Watch (no aplica a la tarjeta física ni a compras en línea con los datos de la tarjeta).
+| Fuente | Cubre | Notas |
+|---|---|---|
+| **A. Aviso del banco** (principal) | Cualquier compra con tarjeta: física, en línea o con Apple Pay | Depende de que tu banco mande un aviso por cada compra. Solo se ha probado con BBVA México. |
+| **B. Apple Pay / Wallet** (respaldo) | Solo pagos físicos con el iPhone o el Apple Watch (NFC) | A veces no se ejecuta; por eso es respaldo. |
 
-1. **Actualiza la base de datos:** vuelve a ejecutar `supabase/schema.sql` en el SQL Editor de Supabase (es idempotente) **antes** de publicar esta versión de la app.
-2. En la app: **Ajustes → Apple Pay (Wallet) → Activar**. Se muestra la URL, la clave pública y tu **token secreto** (solo se ve una vez).
-3. En el iPhone (**iOS 27**): abre **Atajos → Nuevo atajo**. Ya no hay pestaña de automatizaciones: el disparador es un bloque del propio atajo. Agrega **When Any Card is tapped** y elige tus tarjetas (si no lo encuentras, descríbelo en *Describe a shortcut*: «cuando pague con Apple Pay»). Verifica que corra solo, sin pedir confirmación.
-4. Agrega **Get contents of** (URL) con método **POST**:
-   - URL: la que muestra la app (`…/rest/v1/rpc/ingest_wallet`).
-   - Headers: `apikey` = la clave pública, `Content-Type` = `application/json`. Sin filas vacías.
-   - Request Body → JSON: `p_token` = tu token, `p_amount` = *Amount*, `p_merchant` = *Merchant*, `p_card` = *Card or Pass*, y opcional `p_date` = fecha actual con formato `yyyy-MM-dd`.
-   - **Pega el token a mano en el editor**; no lo escribas en la caja de Siri.
-   - Prueba sin pagar: toca ▶ (con **Show Content** al final para ver la respuesta). Debe decir `invalid amount`: el servidor aceptó todo y solo rechazó el monto vacío. Quita **Show Content** después.
-5. Haz un pago de prueba: en un minuto aparece en **Gastos por revisar**.
+Si una misma compra llega por las dos, se guarda **una sola vez**.
 
-Cómo funciona y qué esperar:
-- El token no es tu contraseña: solo permite **agregar gastos** a tu cuenta, nada más. En la base solo se guarda su huella SHA-256. Si se filtra, **genera uno nuevo** (el anterior deja de servir) o desactívalo desde Ajustes.
-- Si el comercio ya tiene una regla, el gasto llega categorizado y confirmado. Si no, entra como *Otros gastos* **por revisar**.
-- Las reglas ignoran los números de sucursal: «OXXO 4521 CDMX» y «OXXO 77 CDMX» son el mismo comercio.
-- Los reembolsos (montos negativos) se rechazan; si el mismo cargo llega dos veces en menos de 45 segundos, se ignora el duplicado.
-- Si no mandas `p_date`, se usa la fecha de Ciudad de México.
-- Las variables del disparador son *Amount*, *Merchant* y *Card or Pass*. Si alguna llega vacía, el registro falla y Atajos lo muestra: el gasto se captura a mano.
+**Requisitos:** iPhone con **iOS 27** (los nombres de abajo son los de esa versión, en inglés si tu teléfono está en inglés: en iOS 27 ya no hay pestaña de automatizaciones, el disparador es un bloque del propio atajo), la app Atajos y la base de datos configurada.
 
-### Respaldo: el aviso de tu banco
+### Paso 0 · Preparar (una sola vez)
 
-El disparador de Wallet solo ve pagos físicos con NFC y a veces no se ejecuta. El aviso que el banco manda por **cada compra** cubre también tarjeta física y compras en línea, así que sirve como segunda fuente.
+1. **Actualiza la base de datos:** ejecuta de nuevo `supabase/schema.sql` en el SQL Editor de Supabase (es idempotente y no borra datos).
+2. En la app: **Ajustes → Registro automático → Activar**. Se muestran la **URL**, la **clave pública** y tu **token secreto**. El token **solo se ve una vez**: cópialo y guárdalo.
 
-1. **Vuelve a ejecutar `supabase/schema.sql`** en Supabase (agrega columnas y la función `ingest_notification`; es idempotente).
-2. En el iPhone crea **otro atajo** con el disparador de **notificación** (iOS 27) de la app de tu banco y la acción **Get contents of** (URL) con método **POST**, mismos encabezados que el atajo de Wallet y la dirección terminada en `/rest/v1/rpc/ingest_notification`.
-3. Cuerpo JSON: `p_token` (el mismo token) y `p_text` (el mensaje de la notificación). Opcional: `p_title` y `p_card`.
+### Opción A · Aviso del banco (principal)
 
-El servidor extrae monto, comercio, tarjeta y fecha. Ejemplo reconocido (BBVA México):
-`Compra con TDD 1985 en ANTHROPIC* CLAUDE $349.00 10 noviembre 15:49h`
+1. En **Atajos** toca **+** para crear un atajo nuevo.
+2. Agrega el disparador **When I receive a notification**. Elige la app de tu banco y agrega el filtro **Title contains** `Compra`. Deja **Automation** encendido y **Confirm Before Run** apagado (si lo enciendes, pregunta en cada compra). **Notify** es opcional.
+3. Agrega la acción **Get contents of** (URL) y pega la dirección que muestra la app, pero terminada en `/rest/v1/rpc/ingest_notification`.
+4. Toca la flecha **›** de la acción y pon **Method** en **POST**.
+5. En **Headers** agrega dos encabezados y no dejes filas vacías:
+   - `apikey` = la clave pública;
+   - `Content-Type` = `application/json`.
+6. En **Request Body** elige **JSON** y agrega dos campos de tipo **Text**:
+   - `p_token` = tu token;
+   - `p_text` = la variable **Notification › Body**. Para elegirla, toca el valor, busca la variable **Notification** en la barra de variables y toca la propiedad **Body**.
+7. **No uses `Title`** para `p_text`: solo trae «Compra con…», sin monto ni comercio. **No escribas el token en la caja de Siri ni en «Describe a shortcut»**: pégalo a mano en el editor.
+8. Con la siguiente compra, el gasto aparece en **Gastos por revisar**.
 
-- Solo se registran **compras**. Depósitos, transferencias, retiros, promociones, compras rechazadas, cancelaciones y devoluciones se ignoran sin error.
-- **No se duplica:** reenviar el mismo texto no crea otro gasto, y si Wallet y el aviso llegan por la misma compra (mismo monto, hasta 15 minutos de diferencia) queda una sola. Dos compras distintas del mismo monto se conservan como dos.
-- Si el comercio ya tiene una regla, llega categorizado. Si no, entra **por revisar**.
-- El aviso trae «10 noviembre» sin año: se toma el año en curso (si saliera en el futuro, el anterior).
-- Solo se probó con ese formato de aviso. Si el banco redacta otro tipo de compra distinto, se ignorará hasta agregar su formato en `ingest_notification`.
-- No se ha confirmado que el disparador de notificaciones de iOS 27 entregue el texto completo al atajo: se comprueba con una compra real.
+El servidor extrae monto, comercio, tarjeta y fecha; no necesitas separar nada en el atajo. Ejemplo de aviso reconocido (BBVA México):
+
+```
+Compra con TDD 0000 en COMERCIO EJEMPLO $349.00 10 noviembre 15:49h
+```
+
+### Opción B · Apple Pay / Wallet (respaldo)
+
+1. Crea otro atajo y agrega el disparador **When Any Card is tapped**; elige tus tarjetas y deja **Confirm Before Run** apagado.
+2. Agrega **Get contents of** (URL) con la dirección terminada en `/rest/v1/rpc/ingest_wallet`, **Method** `POST` y los mismos dos encabezados.
+3. En **Request Body → JSON**, campos de tipo **Text**:
+   - `p_token` = tu token;
+   - `p_amount` = variable **Amount**;
+   - `p_merchant` = variable **Merchant**;
+   - `p_card` = variable **Card or Pass**;
+   - opcional `p_date` = fecha actual con formato `yyyy-MM-dd`.
+4. Haz un pago pequeño con Apple Pay: en un minuto aparece en **Gastos por revisar**.
+
+### Probar sin esperar una compra
+
+Agrega **Show Content** (con **Contents of URL**) al final del atajo y toca **▶**. Quítalo después.
+
+- Sin datos, el atajo de aviso responde `{"ignored":true,"reason":"empty"}`: la dirección, la clave y el token están bien.
+- Para probar el análisis, cambia `p_text` por un texto fijo como el de arriba y vuelve a tocar **▶**. Debe responder con un `id` y `"review":true`, y el gasto aparece en **Gastos por revisar**. Bórralo desde la app y **vuelve a poner** `Notification › Body`.
+- El atajo de Wallet, sin pago real, responde `invalid amount`: el servidor aceptó todo y solo rechazó el monto vacío.
+
+### Cómo funciona y qué esperar
+
+- **Solo compras:** depósitos, transferencias, retiros, promociones, compras rechazadas, cancelaciones y devoluciones se ignoran sin error. Los reembolsos (montos negativos) de Wallet se rechazan.
+- **Sin duplicados:** reenviar el mismo texto no crea otro gasto, aunque ya lo hayas borrado. Si Wallet y el aviso llegan por la misma compra (mismo monto, con hasta 15 minutos de diferencia) queda una sola. Dos compras distintas del mismo monto se conservan como dos. Si el atajo de Wallet se dispara dos veces en menos de 45 segundos, se ignora la repetición.
+- **Por revisar y reglas:** si el comercio ya tiene una regla, el gasto llega categorizado y confirmado; si no, entra como *Otros gastos* **por revisar**. Las reglas ignoran los números de sucursal: «OXXO 4521 CDMX» y «OXXO 77 CDMX» son el mismo comercio.
+- **Fecha:** el aviso trae «10 noviembre» sin año: se toma el año en curso (si saliera en el futuro, el anterior). Si Wallet no manda `p_date`, se usa la fecha de Ciudad de México.
+- **Sin internet:** el atajo necesita conexión en el momento de la compra. Si no la hay, ese gasto no se registra y hay que capturarlo a mano (la app sí funciona sin conexión).
+- **Otros bancos:** el analizador se validó con un formato de aviso de BBVA (compra con tarjeta de débito). Si tu banco redacta distinto, el aviso se ignorará hasta que se agregue su formato en la función `ingest_notification` de `supabase/schema.sql`.
+
+### Si algo falla
+
+- **El gasto no aparece:** abre el historial del atajo en Atajos. Si no hay ninguna ejecución, iOS no lo disparó (revisa que **Automation** esté encendido y **Confirm Before Run** apagado, y que las notificaciones del banco estén activas). Si hay una ejecución con error, léelo.
+- **`invalid token`:** el token está mal pegado (revisa que no tenga espacios) o lo regeneraste y el atajo tiene el anterior.
+- **`Could not find the function … ingest_notification` / `ingest_wallet`:** falta ejecutar `supabase/schema.sql`, o el cuerpo tiene campos de más (por ejemplo, `p_amount` en el atajo del aviso).
+- **`invalid amount` en Wallet con un pago real:** la variable **Amount** llegó vacía; captura el gasto a mano.
+- **`{"ignored":true,"reason":"no_match"}`:** el texto no parece una compra con el formato conocido.
+
+## Privacidad y seguridad
+
+- El token no es tu contraseña: solo permite **agregar gastos** a tu cuenta. En la base solo se guarda su huella SHA-256. Si se filtra, **genera uno nuevo** (el anterior deja de servir) o desactívalo desde Ajustes.
+- Cada usuario solo puede leer y escribir sus filas (Row Level Security). Quien administra el proyecto de Supabase puede ver el panel de la base de datos.
+- **Borrar todo** en la app borra de forma lógica (los registros se marcan como eliminados). Para eliminar los datos de forma definitiva, borra la cuenta del usuario en Supabase: sus filas se borran en cascada.
+- La clave `sb_publishable_…` de `js/config.js` es pública por diseño; nunca pongas ahí la `secret` ni la `service_role`.
+
+## App de iPhone (experimental)
+
+Existe una versión empaquetada con Capacitor en la rama [`ios-build`](https://github.com/Netote/gastos/tree/ios-build), con un flujo de GitHub Actions que compila un `.ipa` sin firmar para instalarlo desde Windows con Sideloadly. **No está en `main` ni se ha podido probar la compilación**; con un Apple ID gratuito la firma dura 7 días. La aplicación web instalada desde Safari es la versión recomendada.
 
 ## Diseño y animaciones
 
 - **Vidrio:** los tokens están al inicio de [css/app.css](css/app.css) (`--glass`, `--glass-strong`, `--edge-*`, `--orb*`). El fondo son cuatro manchas de color (`.bg`); el borde de luz de cada superficie es un degradado de 1 px con máscara.
 - **Animaciones:** [js/fx.js](js/fx.js) usa [Motion](https://motion.dev) (el motor de Framer Motion sin React), empaquetado en `vendor/motion.min.js` (MIT, ver `vendor/LICENSE-motion.txt`). Solo se animan `opacity` y `transform`. Si la librería no carga, la app funciona igual y sin movimiento.
-- **Accesibilidad:** se respetan «Reducir movimiento» (sin animaciones, números finales desde el primer instante), «Reducir transparencia» (superficies sólidas, sin desenfoque) y «Aumentar contraste». En las cuatro combinaciones de tema y tamaño, los textos cumplen WCAG AA (≥ 4.5:1), medidos contra el fondo real del vidrio; el peor caso fue 5.1:1.
+- **Accesibilidad:** se respetan «Reducir movimiento» (sin animaciones, números finales desde el primer instante), «Reducir transparencia» (superficies sólidas, sin desenfoque) y «Aumentar contraste». En las cuatro combinaciones de tema y tamaño, los textos cumplen WCAG AA (≥ 4.5:1), medidos contra el fondo real del vidrio; el peor caso fue 5.08:1.
 - **Rendimiento:** el fondo está quieto en el móvil. Mover algo detrás de tarjetas con desenfoque obliga a recalcular el desenfoque de todas en cada cuadro, y eso gasta batería. La deriva lenta de las manchas solo se activa en pantallas de 900 px o más con ratón.
 - **Si cambias colores:** vuelve a comprobar el contraste. Con vidrio, el color detrás del texto cambia al desplazarse, y los acentos (rojo, verde, naranja) son los primeros en fallar.
 
 ## Mantenimiento
 
-- **Publicar cambios:** sube la versión en `VERSION` dentro de `sw.js` para que los celulares descarguen lo nuevo.
-- **Pruebas:** `npm test` (utilidades). Las funciones SQL de Wallet se pueden probar contra un Postgres local ejecutando `supabase/schema.sql`.
+- **Publicar cambios:** sube la versión en `VERSION` dentro de `sw.js` (y en `package.json`) para que los celulares descarguen lo nuevo. Abre la app desde el icono, ciérrala por completo y vuelve a abrirla; a veces hace falta abrirla dos veces.
+- **Pruebas:** `npm test` (utilidades). Las funciones SQL de registro automático se pueden probar contra un Postgres local ejecutando `supabase/schema.sql`.
 - **Plan gratuito de Supabase:** el proyecto se pausa tras 7 días sin uso. Se reactiva desde el panel y **no se pierden datos**. Igual conviene exportar un respaldo JSON de vez en cuando.
 - **Dominio propio de Supabase:** si lo usas, agrégalo a `connect-src` en la etiqueta CSP de `index.html`.

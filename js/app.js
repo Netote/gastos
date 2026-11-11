@@ -687,11 +687,11 @@ function renderWallet(){
   const info = $('#walletInfo'), btns = $('#walletBtns'), has = !!wallet.date;
   if (wallet.error) info.innerHTML = '<span class="err">' + esc(wallet.error) + '</span>';
   else if (wallet.date === undefined) info.textContent = 'Consultando…';
-  else info.textContent = has ? 'Activo desde el ' + new Date(wallet.date).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'}) + '. Cada pago con Apple Pay se registra solo.' : 'Desactivado. Actívalo para que tus pagos con Apple Pay se registren solos, con monto y comercio.';
+  else info.textContent = has ? 'Activo desde el ' + new Date(wallet.date).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'}) + '. Tus atajos ya pueden registrar gastos.' : 'Desactivado. Actívalo para registrar gastos automáticamente desde el aviso de tu banco o Apple Pay.';
   const off = wallet.busy || wallet.date === undefined;
   btns.innerHTML = has
     ? '<button type="button" class="btn" id="walletNew"' + (off ? ' disabled' : '') + '>' + ico('refresh', 18) + '<span>Generar token nuevo</span></button><button type="button" class="btn danger" id="walletOff"' + (off ? ' disabled' : '') + '>Desactivar</button>'
-    : '<button type="button" class="btn primary" id="walletNew"' + (off || wallet.error ? ' disabled' : '') + '>' + ico('plus', 18) + '<span>Activar registro con Apple Pay</span></button>';
+    : '<button type="button" class="btn primary" id="walletNew"' + (off || wallet.error ? ' disabled' : '') + '>' + ico('plus', 18) + '<span>Activar registro automático</span></button>';
   const secret = $('#walletSecret'); secret.hidden = !wallet.token;
   if (wallet.token){ const c = sync.apiConfig(); $('#wUrl').value = c.url; $('#wKey').value = c.key; $('#wToken').value = wallet.token; }
 }
@@ -702,7 +702,7 @@ async function walletAction(kind){
   wallet.busy = true; wallet.error = ''; renderWallet();
   try {
     if (kind === 'new'){ wallet.token = await sync.createWalletToken(); wallet.date = new Date().toISOString(); }
-    else { await sync.revokeWalletToken(); wallet.token = null; wallet.date = null; toast('Registro con Apple Pay desactivado'); }
+    else { await sync.revokeWalletToken(); wallet.token = null; wallet.date = null; toast('Registro automático desactivado'); }
   } catch(e){ wallet.error = walletErr(e); }
   wallet.busy = false; renderWallet();
 }

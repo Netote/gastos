@@ -252,7 +252,7 @@ grant execute on function public.ingest_wallet(text, text, text, text, text) to 
 -- El atajo manda el texto tal como llegó; aquí se extraen monto, comercio, tarjeta y fecha. Así, si el banco cambia
 -- la redacción, se corrige en la base de datos sin tocar el atajo. Solo se registran COMPRAS; el resto se ignora
 -- sin error ({"ignored": true}). Ejemplo reconocido:
---   «Compra con TDD 1985 en ANTHROPIC* CLAUDE $349.00 10 noviembre 15:49h»
+--   «Compra con TDD 0000 en COMERCIO EJEMPLO $349.00 10 noviembre 15:49h»
 -- Es seguro reenviar el mismo texto: ext_id (huella del texto) evita duplicados.
 create or replace function public.ingest_notification(p_token text, p_text text, p_title text default '', p_card text default '')
 returns jsonb

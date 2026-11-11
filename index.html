@@ -334,7 +334,7 @@
       <div class="row" id="accountBtns"></div>
     </section>
     <section id="walletSec" hidden>
-      <h3>Apple Pay (Wallet)</h3>
+      <h3>Registro automático de gastos</h3>
       <p id="walletInfo" class="muted"></p>
       <div class="row" id="walletBtns"></div>
       <div id="walletSecret" class="confirm" hidden>
@@ -344,26 +344,27 @@
         <div class="copy"><label for="wToken">Tu token secreto</label><div class="copy-row"><input id="wToken" readonly><button type="button" class="btn sm" data-copy="wToken">Copiar</button></div></div>
       </div>
       <details class="details">
-        <summary>Cómo armar el atajo en el iPhone (iOS 27)</summary>
+        <summary>Atajo principal: el aviso de tu banco (iOS 27)</summary>
+        <p class="hint">Cubre toda compra con tarjeta: física, en línea o con Apple Pay. El servidor lee el texto del aviso, así que no tienes que separar nada en el atajo.</p>
         <ol class="steps">
-          <li>Abre <strong>Atajos</strong> y crea un atajo nuevo (<strong>Nuevo atajo</strong>). En iOS 27 las automatizaciones ya no tienen pestaña aparte: el disparador es un bloque dentro del atajo.</li>
-          <li>Agrega el disparador <strong>When Any Card is tapped</strong> («cuando se toca cualquier tarjeta») y elige tus tarjetas. Si no lo encuentras, descríbelo en <em>Describe a shortcut</em>: «cuando pague con Apple Pay con cualquier tarjeta». Revisa que se ejecute solo y no pida confirmación.</li>
-          <li>Agrega la acción <strong>Get contents of</strong> (URL). Pega la dirección de arriba y cambia <em>Method</em> a <strong>POST</strong>.</li>
+          <li>En <strong>Atajos</strong> toca <strong>+</strong> para crear un atajo nuevo. En iOS 27 el disparador es un bloque del propio atajo.</li>
+          <li>Agrega el disparador <strong>When I receive a notification</strong>, elige la app de tu banco y agrega el filtro <strong>Title contains</strong> <code>Compra</code>. Deja <strong>Automation</strong> encendido y <strong>Confirm Before Run</strong> apagado.</li>
+          <li>Agrega <strong>Get contents of</strong> (URL) con la dirección de arriba, pero terminada en <code>ingest_notification</code> en lugar de <code>ingest_wallet</code>, y pon <em>Method</em> en <strong>POST</strong>.</li>
           <li>En <em>Headers</em> agrega <code>apikey</code> con la clave pública y <code>Content-Type</code> con <code>application/json</code>. No dejes filas vacías.</li>
-          <li>En <em>Request Body</em> elige <strong>JSON</strong> y agrega estos campos: <code>p_token</code> (pega tu token como texto), <code>p_amount</code> (variable <em>Amount</em>), <code>p_merchant</code> (<em>Merchant</em>), <code>p_card</code> (<em>Card or Pass</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
+          <li>En <em>Request Body</em> elige <strong>JSON</strong> y agrega dos campos de tipo Texto: <code>p_token</code> (tu token) y <code>p_text</code> con la variable <strong>Notification › Body</strong>. No uses <em>Title</em>: no trae el monto.</li>
           <li><strong>No escribas el token en la caja de Siri ni en «Describe a shortcut»:</strong> pégalo a mano en el editor.</li>
-          <li>Para probar sin pagar, toca ▶: debe responder <code>invalid amount</code> (el servidor aceptó todo y solo rechazó el monto vacío). Con un pago real, el gasto aparece en <strong>Gastos por revisar</strong> en un minuto.</li>
+          <li>Para probar sin esperar una compra, agrega <strong>Show Content</strong> al final y toca ▶: sin aviso responde <code>{"ignored":true,"reason":"empty"}</code>. Quítalo después. Con la siguiente compra, el gasto aparece en <strong>Gastos por revisar</strong>.</li>
+          <li>Solo se registran las <strong>compras</strong>; depósitos, retiros y promociones se ignoran sin error. Reenviar el mismo aviso no duplica.</li>
         </ol>
       </details>
       <details class="details">
-        <summary>Respaldo: atajo con el aviso del banco (BBVA)</summary>
-        <p class="hint">El disparador de Wallet a veces no se ejecuta. El aviso que manda tu banco por cada compra también cubre tarjeta física y compras en línea. Si llegan los dos, se registra una sola vez.</p>
+        <summary>Respaldo: pagos con Apple Pay (Wallet)</summary>
+        <p class="hint">Solo ve pagos físicos con el iPhone o el Apple Watch y a veces no se ejecuta. Si una compra llega por los dos atajos, se registra una sola vez.</p>
         <ol class="steps">
-          <li>Crea otro atajo y agrega el disparador de <strong>notificación</strong> (iOS 27): elige la app de tu banco y, si te deja, filtra el mensaje con la palabra <code>Compra</code>.</li>
-          <li>Agrega <strong>Get contents of</strong> (URL) con método <strong>POST</strong>. La dirección es la misma de arriba pero terminada en <code>ingest_notification</code> en lugar de <code>ingest_wallet</code>.</li>
-          <li>Mismos encabezados: <code>apikey</code> y <code>Content-Type: application/json</code>.</li>
-          <li>Cuerpo JSON: <code>p_token</code> (tu token) y <code>p_text</code> (el <em>mensaje</em> de la notificación; si ofrece título aparte, mándalo en <code>p_title</code>). No hace falta que extraigas monto ni comercio: lo hace el servidor.</li>
-          <li>Solo se registran las <strong>compras</strong>; depósitos, retiros y promociones se ignoran sin error. Reenviar el mismo aviso no duplica.</li>
+          <li>Crea otro atajo y agrega el disparador <strong>When Any Card is tapped</strong>; elige tus tarjetas y deja <strong>Confirm Before Run</strong> apagado.</li>
+          <li>Agrega <strong>Get contents of</strong> (URL) con la dirección de arriba (<code>ingest_wallet</code>) y <em>Method</em> <strong>POST</strong>. En <em>Headers</em>, los mismos dos encabezados.</li>
+          <li>En <em>Request Body</em> elige <strong>JSON</strong> y agrega campos de tipo Texto: <code>p_token</code> (tu token), <code>p_amount</code> (variable <em>Amount</em>), <code>p_merchant</code> (<em>Merchant</em>), <code>p_card</code> (<em>Card or Pass</em>) y, opcional, <code>p_date</code> (fecha actual con formato <code>yyyy-MM-dd</code>).</li>
+          <li>Sin un pago real, ▶ responde <code>invalid amount</code>: el servidor aceptó todo y solo rechazó el monto vacío. Con un pago real, el gasto aparece en <strong>Gastos por revisar</strong> en un minuto.</li>
         </ol>
       </details>
     </section>
