@@ -4,8 +4,6 @@ App web personal para llevar ingresos, gastos, presupuestos, metas de ahorro y p
 Funciona en computadora y celular (se instala como app), **sin conexión**, y sincroniza tus datos entre dispositivos con tu cuenta.
 Cada compra con tarjeta puede registrarse sola en tu iPhone a partir del aviso de tu banco.
 
-Versión publicada: https://netote.github.io/gastos/
-
 ## Funciones
 
 - **Saldo actual:** cuánto dinero tienes hoy. Lo ajustas una vez con lo que traes y después se actualiza solo con cada ingreso o gasto. Los movimientos con fecha futura no cuentan hasta su día.
@@ -114,7 +112,7 @@ Una página web no puede leer tu Wallet ni tus notificaciones, pero la app **Ata
 
 | Fuente | Cubre | Notas |
 |---|---|---|
-| **A. Aviso del banco** (principal) | Cualquier compra con tarjeta: física, en línea o con Apple Pay | Depende de que tu banco mande un aviso por cada compra. Solo se ha probado con BBVA México. |
+| **A. Aviso del banco** (principal) | Cualquier compra con tarjeta: física, en línea o con Apple Pay | Depende de que tu banco mande un aviso por cada compra. Solo se ha probado con el formato de aviso de un banco mexicano. |
 | **B. Apple Pay / Wallet** (respaldo) | Solo pagos físicos con el iPhone o el Apple Watch (NFC) | A veces no se ejecuta; por eso es respaldo. |
 
 Si una misma compra llega por las dos, se guarda **una sola vez**.
@@ -141,7 +139,7 @@ Si una misma compra llega por las dos, se guarda **una sola vez**.
 7. **No uses `Title`** para `p_text`: solo trae «Compra con…», sin monto ni comercio. **No escribas el token en la caja de Siri ni en «Describe a shortcut»**: pégalo a mano en el editor.
 8. Con la siguiente compra, el gasto aparece en **Gastos por revisar**.
 
-El servidor extrae monto, comercio, tarjeta y fecha; no necesitas separar nada en el atajo. Ejemplo de aviso reconocido (BBVA México):
+El servidor extrae monto, comercio, tarjeta y fecha; no necesitas separar nada en el atajo. Ejemplo de aviso reconocido (compra con tarjeta de débito):
 
 ```
 Compra con TDD 0000 en COMERCIO EJEMPLO $349.00 10 noviembre 15:49h
@@ -174,7 +172,7 @@ Agrega **Show Content** (con **Contents of URL**) al final del atajo y toca **�
 - **Por revisar y reglas:** si el comercio ya tiene una regla, el gasto llega categorizado y confirmado; si no, entra como *Otros gastos* **por revisar**. Las reglas ignoran los números de sucursal: «OXXO 4521 CDMX» y «OXXO 77 CDMX» son el mismo comercio.
 - **Fecha:** el aviso trae «10 noviembre» sin año: se toma el año en curso (si saliera en el futuro, el anterior). Si Wallet no manda `p_date`, se usa la fecha de Ciudad de México.
 - **Sin internet:** el atajo necesita conexión en el momento de la compra. Si no la hay, ese gasto no se registra y hay que capturarlo a mano (la app sí funciona sin conexión).
-- **Otros bancos:** el analizador se validó con un formato de aviso de BBVA (compra con tarjeta de débito). Si tu banco redacta distinto, el aviso se ignorará hasta que se agregue su formato en la función `ingest_notification` de `supabase/schema.sql`.
+- **Otros bancos:** el analizador se validó con un solo formato de aviso (compra con tarjeta de débito). Si tu banco redacta distinto, el aviso se ignorará hasta que se agregue su formato en la función `ingest_notification` de `supabase/schema.sql`.
 
 ### Si algo falla
 
@@ -193,7 +191,7 @@ Agrega **Show Content** (con **Contents of URL**) al final del atajo y toca **�
 
 ## App de iPhone (experimental)
 
-Existe una versión empaquetada con Capacitor en la rama [`ios-build`](https://github.com/Netote/gastos/tree/ios-build), con un flujo de GitHub Actions que compila un `.ipa` sin firmar para instalarlo desde Windows con Sideloadly. **No está en `main` ni se ha podido probar la compilación**; con un Apple ID gratuito la firma dura 7 días. La aplicación web instalada desde Safari es la versión recomendada.
+Existe una versión empaquetada con Capacitor en la rama [`ios-build`](../../tree/ios-build), con un flujo de GitHub Actions que compila un `.ipa` sin firmar para instalarlo desde Windows con Sideloadly. **No está en `main` ni se ha podido probar la compilación**; con un Apple ID gratuito la firma dura 7 días. La aplicación web instalada desde Safari es la versión recomendada.
 
 ## Diseño y animaciones
 
