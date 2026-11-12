@@ -88,6 +88,18 @@ export const createWalletToken = () => rpc('create_ingest_token');
 export const revokeWalletToken = () => rpc('revoke_ingest_token');
 export const apiConfig = () => ({url:SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/rpc/ingest_wallet', key:SUPABASE_KEY});
 
+/* ---------- Suscripciones para el aviso semanal (ver js/push.js) ---------- */
+export async function savePush(sub){
+  if (!client || !user) throw new Error('Inicia sesión para continuar.');
+  const {error} = await client.from('push_subscriptions').upsert(Object.assign({user_id:user.id}, sub), {onConflict:'user_id,endpoint'});
+  if (error) throw error;
+}
+export async function removePush(endpoint){
+  if (!client || !user) return;
+  const {error} = await client.from('push_subscriptions').delete().eq('user_id', user.id).eq('endpoint', endpoint);
+  if (error) throw error;
+}
+
 export async function signOut(){ user = null; pulledOnce = false; await client.auth.signOut(); }
 
 const PAGE = 1000;

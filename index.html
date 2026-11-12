@@ -83,6 +83,7 @@
       <a href="#movimientos" data-view="movimientos"><span data-ico="list"></span><span>Movimientos</span></a>
       <a href="#presupuestos" data-view="presupuestos"><span data-ico="pie"></span><span>Presupuestos</span></a>
       <a href="#metas" data-view="metas"><span data-ico="target"></span><span>Metas</span></a>
+      <a href="#planear" data-view="planear"><span data-ico="calendar"></span><span>Planear</span></a>
       <a href="#fijos" data-view="fijos"><span data-ico="repeat"></span><span>Fijos</span></a>
     </div>
   </nav>
@@ -103,8 +104,12 @@
         <p id="balValue" class="bal-value"></p>
         <p id="balSub" class="bal-sub"></p>
       </div>
-      <button type="button" id="balBtn" class="btn"><span data-ico="pencil:18"></span><span>Ajustar saldo</span></button>
+      <div class="bal-acts">
+        <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>Simular compra</span></button>
+        <button type="button" id="balBtn" class="btn"><span data-ico="pencil:18"></span><span>Ajustar saldo</span></button>
+      </div>
     </section>
+    <section id="weekCard" class="card week" aria-labelledby="weekTitle" hidden></section>
     <section id="reviewCard" class="card review" aria-labelledby="reviewTitle" hidden>
       <div class="card-head">
         <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay o el aviso de tu banco. Toca uno para corregirlo o confirma con la palomita.</p></div>
@@ -178,6 +183,29 @@
       <button type="button" id="newGoal" class="btn primary"><span data-ico="plus:18"></span><span>Nueva meta</span></button>
     </div>
     <div id="goalList" class="goal-grid"></div>
+  </section>
+
+  <!-- Planear: calendario predictivo -->
+  <section class="view" id="v-planear" data-view="planear" aria-labelledby="h-plan" hidden>
+    <div class="view-head">
+      <div><h1 class="h2" id="h-plan">Planear</h1><p class="sub">Tus pagos por día y cómo quedará tu saldo</p></div>
+      <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>Simular compra</span></button>
+    </div>
+    <div id="planKpis" class="kpis"></div>
+    <ul id="planAlerts" class="alerts" aria-label="Avisos de la proyección"></ul>
+    <div class="grid">
+      <section class="card c-7" aria-labelledby="calTitle">
+        <div class="card-head"><div><h2 id="calTitle">Calendario</h2><p class="sub" id="calSub"></p></div></div>
+        <div class="cal-head" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+        <div id="calGrid" class="cal"></div>
+        <p class="cal-legend"><span><i class="k-in"></i>Ingreso</span><span><i class="k-out"></i>Gasto</span><span><i class="k-low"></i>Saldo justo</span><span><i class="k-neg"></i>Faltante</span><span><i class="k-clash"></i>Pagos que coinciden</span></p>
+      </section>
+      <section class="card c-5" aria-labelledby="dayTitle"><div id="planDay"></div></section>
+      <section class="card c-12" aria-labelledby="projTitle">
+        <div class="card-head"><div><h2 id="projTitle">Saldo previsto</h2><p class="sub">Próximos 60 días: fijos, pagos programados y tu gasto diario habitual</p></div></div>
+        <div class="chart-box"><canvas id="planCanvas" role="img" aria-label="Saldo previsto a 60 días"></canvas></div>
+      </section>
+    </div>
   </section>
 
   <!-- Recurrentes -->
@@ -324,6 +352,27 @@
   </form>
 </dialog>
 
+<!-- Simulador de compras (chat) -->
+<dialog id="chatDlg" class="dlg sheet chat" aria-labelledby="chatTitle">
+  <div class="dlg-head"><div><h2 id="chatTitle">Simulador de compras</h2><p class="sub">Calcula con tus datos, en tu dispositivo</p></div><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+  <div id="chatLog" class="chat-log" role="log" aria-live="polite" aria-label="Conversación" tabindex="0"></div>
+  <div id="chatChips" class="chips" aria-label="Sugerencias"></div>
+  <form id="chatForm" class="chat-form" novalidate>
+    <label class="sr-only" for="chatIn">Escribe qué quieres comprar y cuánto cuesta</label>
+    <input id="chatIn" type="text" maxlength="200" autocomplete="off" placeholder="Ej. laptop de 15,000 a 12 meses" enterkeyhint="send">
+    <button type="submit" class="btn primary" aria-label="Enviar" data-ico="send"></button>
+  </form>
+</dialog>
+
+<!-- Reporte semanal -->
+<dialog id="reportDlg" class="dlg sheet" aria-labelledby="repTitle">
+  <div class="dlg-head">
+    <div class="rep-nav"><button type="button" id="repPrev" class="icon-btn" aria-label="Semana anterior" data-ico="left"></button><h2 id="repTitle"></h2><button type="button" id="repNext" class="icon-btn" aria-label="Semana siguiente" data-ico="right"></button></div>
+    <button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button>
+  </div>
+  <div class="dlg-body rep" id="repBody"></div>
+</dialog>
+
 <!-- Ajustes -->
 <dialog id="setDlg" class="dlg sheet" aria-labelledby="setTitle">
   <div class="dlg-head"><h2 id="setTitle">Datos y ajustes</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
@@ -367,6 +416,11 @@
           <li>Sin un pago real, ▶ responde <code>invalid amount</code>: el servidor aceptó todo y solo rechazó el monto vacío. Con un pago real, el gasto aparece en <strong>Gastos por revisar</strong> en un minuto.</li>
         </ol>
       </details>
+    </section>
+    <section id="pushSec" hidden>
+      <h3>Reporte semanal</h3>
+      <p id="pushInfo" class="muted"></p>
+      <div class="row" id="pushBtns"></div>
     </section>
     <section>
       <h3>Reglas por comercio</h3>

@@ -321,3 +321,24 @@ end $$;
 
 revoke all on function public.ingest_notification(text, text, text, text) from public, anon, authenticated;
 grant execute on function public.ingest_notification(text, text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Aviso semanal (notificación push)
+-- ---------------------------------------------------------------------------
+-- Cada dispositivo que activa «Avisarme los lunes» guarda aquí su suscripción de Web Push. La función programada
+-- supabase/functions/weekly-push las lee con la clave de servicio y envía el aviso; las caducadas se borran solas.
+-- La tarea que la dispara cada lunes está en supabase/cron.sql (lleva datos de tu proyecto, por eso va aparte).
+create table if not exists public.push_subscriptions (
+  user_id    uuid        not null default auth.uid() references auth.users (id) on delete cascade,
+  endpoint   text        not null check (char_length(endpoint) between 10 and 1000),
+  p256dh     text        not null check (char_length(p256dh) <= 200),
+  auth       text        not null check (char_length(auth) <= 100),
+  created_at timestamptz not null default now(),
+  primary key (user_id, endpoint)
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "own rows" on public.push_subscriptions;
+create policy "own rows" on public.push_subscriptions for all to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+revoke all on public.push_subscriptions from anon;
+grant select, insert, update, delete on public.push_subscriptions to authenticated;

@@ -15,6 +15,9 @@ Cada compra con tarjeta puede registrarse sola en tu iPhone a partir del aviso d
   - alertas de presupuesto al 80 %;
   - gasto por tarjeta;
   - próximos pagos fijos.
+- **Planear (calendario predictivo):** tus pagos e ingresos por día y el saldo previsto al cierre de cada uno, hasta 12 meses adelante. Avisa de faltantes, de días con saldo justo y de pagos que coinciden. Ver [Planear](#planear-calendario-simulador-y-reporte-semanal).
+- **Simulador de compras (chat):** escribe «laptop de 15,000 a 12 meses» y te dice si te alcanza, cómo quedaría tu saldo a 30 y 60 días, qué pasa con tus deudas y qué alternativas hay. Calcula en tu dispositivo, sin IA externa.
+- **Reporte semanal:** cada lunes, los hechos de tu semana (cuánto gastaste contra tu promedio, gastos fuera de lo normal, presupuestos, lo que viene). Con aviso opcional en el celular.
 - **Gráficas:** gastos por categoría, ingresos contra gastos de los últimos 6 meses y flujo acumulado del mes.
 - **Movimientos:** búsqueda, filtros, agrupación por día, edición y eliminación con opción de deshacer.
 - **Presupuestos:** límite mensual por categoría.
@@ -46,7 +49,12 @@ index.html            Estructura y diálogos
 css/app.css           Estilos (tokens de vidrio, modo oscuro, móvil)
 js/app.js             Interfaz y eventos
 js/fx.js              Animaciones (Motion)
+js/plan.js            Interfaz de Planear: calendario, chat simulador y reporte semanal
 js/util.js            Lógica pura: fechas, montos, indicadores (con pruebas)
+js/forecast.js        Lógica pura: saldo previsto día a día y simulación de compras (con pruebas)
+js/nlu.js             Lógica pura: interpreta las frases del chat (con pruebas)
+js/report.js          Lógica pura: reporte semanal (con pruebas)
+js/push.js            Suscripción al aviso semanal (Web Push)
 js/store.js           Almacén local y cola de cambios
 js/sync.js            Login y sincronización con Supabase
 js/charts.js          Gráficas (Chart.js)
@@ -55,6 +63,8 @@ js/config.js          ← aquí van tu URL y clave de Supabase
 sw.js                 Service worker (uso sin conexión)
 vendor/               Librerías propias del sitio: Chart.js, Supabase, Motion
 supabase/schema.sql   Tablas, índices, triggers, políticas RLS y funciones de registro automático
+supabase/cron.sql     Tarea programada del aviso semanal (plantilla: lleva datos de tu proyecto)
+supabase/functions/   Función `weekly-push`: envía el aviso de los lunes
 tests/                Pruebas (npm test)
 ```
 
@@ -182,8 +192,98 @@ Agrega **Show Content** (con **Contents of URL**) al final del atajo y toca **�
 - **`invalid amount` en Wallet con un pago real:** la variable **Amount** llegó vacía; captura el gasto a mano.
 - **`{"ignored":true,"reason":"no_match"}`:** el texto no parece una compra con el formato conocido.
 
+## Planear: calendario, simulador y reporte semanal
+
+Las tres funciones usan **el mismo motor de proyección** (`js/forecast.js`), así que siempre dan las mismas cifras. Todo se calcula en el dispositivo y funciona sin conexión.
+
+### Cómo se calcula el saldo previsto
+
+Saldo de hoy, y para cada día siguiente:
+
+- **más** los ingresos fijos y los movimientos de ingreso que ya capturaste con fecha futura;
+- **más** los ingresos habituales que la app detecta en tu historial (por ejemplo, una quincena que anotas a mano cada mes: misma descripción, día parecido y monto parecido en al menos 2 de los últimos 3 meses). Aparecen como «Ingreso estimado»; conviene pasarlos a **Fijos** para que sean exactos;
+- **menos** los pagos fijos y los gastos capturados con fecha futura;
+- **menos** tu gasto diario habitual: el promedio de tus gastos no fijos de los últimos 90 días.
+
+Es conservador a propósito: los ingresos esporádicos **no** se proyectan. Con menos de 14 días de historial la app avisa que la estimación es aproximada.
+
+- **Colchón:** una semana de tu gasto diario habitual. Quedar por debajo se marca como «saldo justo»; quedar bajo cero, como «faltante».
+- **Coincidencias:** dos o más pagos en una ventana de 3 días. Se avisa cuando se llevan 20 % o más del saldo previsto, y si caen antes de tu siguiente ingreso.
+
+### Calendario
+
+Pestaña **Planear**. Los días pasados muestran lo que ocurrió; hoy y los futuros, lo programado y el saldo previsto al cierre. Toca un día para ver el detalle y agregar un pago en esa fecha (un gasto con fecha futura) o un fijo nuevo ese día del mes. Con las flechas del periodo puedes avanzar hasta 12 meses.
+
+### Simulador de compras
+
+Botón **Simular compra** (en el Resumen y en Planear). Entiende frases como:
+
+| Frase | Qué hace |
+|---|---|
+| `¿Puedo comprar una laptop de 15,000?` | Compra de contado hoy |
+| `tele de 12 mil a 12 meses` | Meses sin intereses; el primer pago es un mes después |
+| `coche de 250000 en 48 pagos con 14.5% de interés` | Crédito con tasa anual |
+| `comprar unos tenis de 2,500 el viernes` | Compra en otra fecha (también «el 15», «a fin de mes», «en la quincena») |
+| `¿y a 6 meses?`, `¿y de contado?` | Cambia un dato de la simulación anterior |
+| `¿Cuánto debo?` · `¿Qué pagos vienen?` · `¿Cuánto puedo gastar hoy?` · `¿Cuánto tendré el 30?` | Consultas |
+
+La respuesta es **Sí puedes**, **Puedes, pero quedarías justo** o **Mejor no por ahora**:
+
+- *No*: el saldo previsto bajaría de cero en los próximos 60 días, o la mensualidad no cabe en lo que te queda libre al mes.
+- *Justo*: no llega a cero, pero baja de tu colchón, o la mensualidad te deja menos del 10 % de tus ingresos libres.
+- *Sí*: ninguna de las anteriores.
+
+Además muestra el saldo con y sin la compra (hoy, a 30 y a 60 días), tus deudas a plazo antes y después, el efecto en el presupuesto de esa categoría y alternativas calculadas (esperar a cierta fecha, pagar a más meses, o el monto máximo que sí cabe). Con **Ver en el calendario** la compra aparece como simulación en los días que afectaría, y **Registrar esta compra** abre el formulario ya llenado (un gasto, o un fijo con su número de pagos si es a meses).
+
+El simulador **no usa tarjetas de crédito**: una compra de contado baja tu saldo ese día y una compra a meses se trata como un fijo mensual. Las «deudas» son los fijos de gasto que tienen número de pagos.
+
+### Reporte semanal
+
+Cada lunes aparece la tarjeta **Tu semana** en el Resumen, con la semana cerrada (lunes a domingo). El reporte completo incluye lo más importante, ingresos y gastos contra la semana anterior y contra tu promedio, en qué se fue, gastos fuera de lo normal, fijos pagados, lo que viene en 7 días, presupuestos, metas y deudas. Con las flechas puedes ver semanas anteriores: se recalculan con tus datos, no se guardan aparte.
+
+### Aviso semanal (notificación push, opcional)
+
+Sin configurar nada, el reporte aparece dentro de la app. Para recibir además un aviso en el celular cada lunes a las 9:00 (hora de Ciudad de México):
+
+1. **Genera las claves** (una sola vez). Guarda las dos; la privada es secreta:
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+2. Pega la **pública** en `VAPID_PUBLIC_KEY` de `js/config.js` y publica el cambio.
+3. **Actualiza la base de datos:** ejecuta de nuevo `supabase/schema.sql` (crea la tabla `push_subscriptions`).
+4. **Despliega la función** con la CLI de Supabase (te pedirá iniciar sesión):
+   ```bash
+   npx supabase login
+   ```
+   ```bash
+   npx supabase link --project-ref TU-PROYECTO
+   ```
+   ```bash
+   npx supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:tu-correo CRON_SECRET=una-cadena-larga-al-azar
+   ```
+   ```bash
+   npx supabase functions deploy weekly-push --no-verify-jwt
+   ```
+5. **Programa el envío:** abre `supabase/cron.sql`, cambia `TU-PROYECTO` y `TU-CRON-SECRET`, y ejecútalo en el SQL Editor. No subas ese archivo con tus valores.
+6. En cada dispositivo: **Ajustes → Reporte semanal → Avisarme los lunes**. «Probar aviso» muestra uno local para ver cómo queda.
+
+Para probar el envío real sin esperar al lunes:
+
+```bash
+curl -X POST https://TU-PROYECTO.supabase.co/functions/v1/weekly-push -H "x-cron-secret: TU-CRON-SECRET"
+```
+
+Responde cuántos avisos envió. Qué esperar:
+
+- **iPhone:** solo funciona con la app instalada en la pantalla de inicio (iOS 16.4 o posterior) y abierta desde ese icono.
+- El aviso dice cuánto gastaste en la semana y si fue más o menos que la anterior; el detalle se calcula al abrir la app.
+- El servidor solo guarda la dirección de envío de cada dispositivo. Si desinstalas la app o quitas el permiso, esa suscripción se borra sola en el siguiente envío.
+- **Plan gratuito de Supabase:** si el proyecto está pausado por inactividad, ese lunes no llega el aviso (el reporte dentro de la app sí aparece).
+- El envío desde Supabase **no se ha probado de extremo a extremo** en este proyecto: la suscripción, el aviso de prueba y la función están escritos, pero falta desplegarla con tus claves.
+
 ## Privacidad y seguridad
 
+- La clave **privada** VAPID y `CRON_SECRET` son secretos de Supabase: nunca van en `js/config.js` ni en el repositorio.
 - El token no es tu contraseña: solo permite **agregar gastos** a tu cuenta. En la base solo se guarda su huella SHA-256. Si se filtra, **genera uno nuevo** (el anterior deja de servir) o desactívalo desde Ajustes.
 - Cada usuario solo puede leer y escribir sus filas (Row Level Security). Quien administra el proyecto de Supabase puede ver el panel de la base de datos.
 - **Borrar todo** en la app borra de forma lógica (los registros se marcan como eliminados). Para eliminar los datos de forma definitiva, borra la cuenta del usuario en Supabase: sus filas se borran en cascada.

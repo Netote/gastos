@@ -3,6 +3,7 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import * as charts from './charts.js';
 import * as fx from './fx.js';
+import * as plan from './plan.js';
 import {ico, paintIcons} from './icons.js';
 
 const {esc, CAT, EXP, INC, catOf} = U;
@@ -24,7 +25,8 @@ function skipSameHTML(el){
 const now = U.todayParts();
 const view = {y:now.y, m:now.m};
 const filters = {q:'', type:'all', cat:'all', sort:'date-desc', allMonths:false};
-const VIEWS = ['resumen', 'movimientos', 'presupuestos', 'metas', 'fijos'];
+const VIEWS = ['resumen', 'movimientos', 'presupuestos', 'metas', 'planear', 'fijos'];
+const PLAN_AHEAD = 12; // meses hacia adelante que se pueden ver en «Planear»
 let route = 'resumen', lastRoute = null, listLimit = 80, renderQueued = false;
 const today = () => U.todayStr();
 const viewKey = () => U.mk(view.y, view.m);
@@ -35,6 +37,8 @@ let nf, cf = new Intl.NumberFormat('es-MX', {notation:'compact', maximumFraction
 function makeNF(){ const cur = store.settings().currency || 'MXN'; try { nf = new Intl.NumberFormat('es-MX', {style:'currency', currency:cur}); } catch(e){ nf = new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}); } }
 const money = c => nf.format(c / 100);
 const units = v => nf.format(v);
+/** Monto corto, sin símbolo, para las casillas del calendario: 1,250,000 centavos → «12.5k». */
+const compact = c => { const v = Math.abs(c) / 100; return (c < 0 ? '−' : '') + (v < 1000 ? String(Math.round(v)) : v < 1e6 ? (v / 1e3).toFixed(v < 1e4 ? 1 : 0).replace(/\.0$/, '') + 'k' : (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'); };
 const curSymbol = () => { const p = nf.formatToParts(0).find(x => x.type === 'currency'); return p ? p.value : '$'; };
 
 /* ---------- Toast con deshacer ---------- */
@@ -55,7 +59,8 @@ function renderThemeBtn(){
   const forced = document.documentElement.getAttribute('data-theme');
   $$('meta[name="theme-color"]').forEach(m => { if (!m.dataset.orig) m.dataset.orig = m.content; m.content = forced ? (dark ? '#070B16' : '#E8EEFC') : m.dataset.orig; });
 }
-function setTheme(t){ document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('gastos:theme', t); } catch(e){} renderThemeBtn(); charts.dropAll(); render(); }
+function repaintCharts(){ charts.dropAll(); plan.themeChanged(); render(); }
+function setTheme(t){ document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('gastos:theme', t); } catch(e){} renderThemeBtn(); repaintCharts(); }
 
 /* ---------- Render general ---------- */
 /** Agrupa varios cambios en un solo repintado por cuadro. */
@@ -63,7 +68,7 @@ function render(){ if (renderQueued) return; renderQueued = true; requestAnimati
 function renderNow(){
   renderPeriod(); renderSync(); renderBanner();
   $$('.cur-sym').forEach(s => s.textContent = curSymbol());
-  ({resumen:renderResumen, movimientos:renderList, presupuestos:renderBudgets, metas:renderGoals, fijos:renderRecurring})[route]();
+  ({resumen:renderResumen, movimientos:renderList, presupuestos:renderBudgets, metas:renderGoals, planear:plan.renderPlan, fijos:renderRecurring})[route]();
   fx.counters($('.view[data-view="' + route + '"]'), money);
   $('#foot').textContent = !store.storageOk ? 'Tu navegador bloqueó el almacenamiento: exporta un respaldo desde «Datos y ajustes».'
     : sync.enabled ? 'Tus datos se guardan en este dispositivo y se sincronizan con tu cuenta.' : 'Tus datos se guardan solo en este dispositivo.';
@@ -71,7 +76,7 @@ function renderNow(){
 function renderPeriod(){
   $('#periodLabel').textContent = U.monthLabel(viewKey());
   const t = today().slice(0, 7);
-  $('#nextM').disabled = viewKey() >= t;
+  $('#nextM').disabled = viewKey() >= (route === 'planear' ? U.addMonths(t, PLAN_AHEAD) : t);
   $('#periodLabel').disabled = viewKey() === t;
 }
 function renderBanner(){ $('#banner').hidden = !store.all('transactions').some(t => t.id.startsWith('smp-')); }
@@ -92,7 +97,10 @@ function renderSync(){
 
 /* ---------- Navegación ---------- */
 function setRoute(r, focus){
+  const report = r === 'reporte'; // enlace del aviso semanal: abre el reporte sobre el Resumen
   route = VIEWS.includes(r) ? r : 'resumen';
+  // Los meses futuros solo existen en «Planear»: al salir se vuelve al mes actual.
+  if (route !== 'planear' && viewKey() > today().slice(0, 7)){ const t = U.todayParts(); view.y = t.y; view.m = t.m; }
   $$('.view').forEach(v => v.hidden = v.dataset.view !== route);
   $$('.tabs a').forEach(a => { if (a.dataset.view === route) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   renderNow();
@@ -100,7 +108,8 @@ function setRoute(r, focus){
   if (lastRoute !== route){ // entrada animada solo al cambiar de sección (no en cada repintado por datos)
     const v = $('.view[data-view="' + route + '"]'); fx.enter(v); fx.counters(v, money, true); lastRoute = route;
   }
-  if (route === 'resumen') requestAnimationFrame(charts.resizeAll);
+  if (route === 'resumen' || route === 'planear') requestAnimationFrame(charts.resizeAll);
+  if (report){ history.replaceState(null, '', '#resumen'); plan.openReport(); }
   if (focus){ window.scrollTo({top:0, behavior:'instant'}); $('#main').focus({preventScroll:true}); }
 }
 
@@ -149,6 +158,12 @@ function renderInsights(){
       '<p class="split-legend"><span><i style="background:var(--primary)"></i>Necesidades ' + pf.format(pc(r.need)) + '% <small>(50)</small></span><span><i style="background:var(--warn)"></i>Deseos ' + pf.format(pc(r.want)) + '% <small>(30)</small></span><span><i style="background:var(--income)"></i>Ahorro ' + (r.save < 0 ? '−' : '') + pf.format(Math.abs(r.save) / r.inc * 100) + '% <small>(20)</small></span></p>'));
   } else {
     out.push(item('scale', '', 'Regla 50/30/20', '<p>Registra tus ingresos del mes para ver cómo se reparte tu dinero entre necesidades, deseos y ahorro.</p>'));
+  }
+
+  if (isCurrentMonth()){
+    const sf = plan.nextShortfall(), day = s => U.fmtDate(s).replace(/ \d{4}$/, '');
+    if (sf.negative) out.push(item('alert', 'bad', 'Faltante previsto', '<p>El ' + day(sf.negative.from) + ' tu saldo bajaría a <strong>' + money(sf.negative.min) + '</strong>: te faltan ' + money(-sf.negative.min) + ' antes de esa fecha. <a href="#planear">Ver calendario</a></p>'));
+    else if (sf.low) out.push(item('calendar', 'warn', 'Saldo justo', '<p>Del ' + day(sf.low.from) + ' al ' + day(sf.low.to) + ' quedarías con <strong>' + money(sf.low.min) + '</strong>, menos que una semana de tu gasto habitual. <a href="#planear">Ver calendario</a></p>'));
   }
 
   const e = U.emergencyMonths(store.all('transactions'), today().slice(0, 7));
@@ -250,7 +265,7 @@ function renderFlow(C){
   });
 }
 function renderResumen(){
-  renderBalance(); renderReview(); renderKPIs(); renderInsights();
+  renderBalance(); plan.renderWeekCard(); renderReview(); renderKPIs(); renderInsights();
   if (charts.available()){ const C = charts.palette(); renderDonut(C); renderBars(C); renderFlow(C); }
   else ['#donutWrap', '#barsBox', '#flowBox'].forEach(s => { $(s).hidden = true; });
   const recent = store.all('transactions').sort(cmpDateDesc).slice(0, 5);
@@ -479,9 +494,9 @@ function openTx(id, preset){
   const type = t ? t.type : (preset && preset.type) || 'expense';
   pickTxType(type);
   renderCatGrid(type, t ? t.category : preset && preset.category);
-  $('#fAmount').value = t ? (t.amount / 100).toFixed(2) : '';
-  $('#fDate').value = t ? t.date : (isCurrentMonth() ? today() : viewKey() + '-01');
-  $('#fDesc').value = t ? t.description || '' : '';
+  $('#fAmount').value = t ? (t.amount / 100).toFixed(2) : preset && preset.amount ? U.centsToInput(preset.amount) : '';
+  $('#fDate').value = t ? t.date : preset && preset.date ? preset.date : (isCurrentMonth() ? today() : viewKey() + '-01');
+  $('#fDesc').value = t ? t.description || '' : (preset && preset.description) || '';
   $('#fCard').value = t ? t.card || '' : '';
   $('#cardList').innerHTML = [...new Set(store.all('transactions').map(x => x.card).filter(Boolean))].sort().map(c => '<option value="' + esc(c) + '"></option>').join('');
   // «Recordar comercio» solo aplica a gastos que traen comercio (los de Wallet).
@@ -569,13 +584,14 @@ function submitContrib(){
 /* ---------- Diálogo de fijo ---------- */
 let recEditing = null, recType = 'expense', pickRecType;
 function fillRecCats(type, sel){ $('#rCat').innerHTML = '<option value="">Elige una categoría</option>' + (type === 'income' ? INC : EXP).map(c => '<option value="' + c.id + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.name) + '</option>').join(''); }
-function openRec(id){
-  const r = id ? store.get('recurring', id) : null; recEditing = r ? r.id : null;
-  pickRecType(r ? r.type : 'expense'); fillRecCats(recType, r ? r.category : '');
+/** `preset` precarga un fijo nuevo (desde el calendario o al registrar una compra simulada a meses). */
+function openRec(id, preset){
+  const r = id ? store.get('recurring', id) : null, p = !r && preset || {}; recEditing = r ? r.id : null;
+  pickRecType(r ? r.type : p.type || 'expense'); fillRecCats(recType, r ? r.category : p.category || '');
   $('#recTitle').textContent = r ? 'Editar fijo' : 'Nuevo fijo';
-  $('#rName').value = r ? r.name : ''; $('#rAmount').value = r ? U.centsToInput(r.amount) : '';
-  $('#rDay').value = r ? r.day : Number(today().slice(8, 10)); $('#rStart').value = r ? r.start_month.slice(0, 7) : today().slice(0, 7);
-  $('#rOcc').value = r && r.occurrences ? r.occurrences : '';
+  $('#rName').value = r ? r.name : (p.name || '').slice(0, 60); $('#rAmount').value = r ? U.centsToInput(r.amount) : p.amount ? U.centsToInput(p.amount) : '';
+  $('#rDay').value = r ? r.day : p.day || Number(today().slice(8, 10)); $('#rStart').value = r ? r.start_month.slice(0, 7) : p.start || today().slice(0, 7);
+  $('#rOcc').value = r && r.occurrences ? r.occurrences : p.occ || '';
   ['rName', 'rAmount', 'rCat', 'rDay', 'rStart', 'rOcc'].forEach(k => setErr(k, ''));
   $('#rDelete').hidden = !r;
   openDlg($('#recDlg')); if (!r) setTimeout(() => $('#rName').focus(), 50);
@@ -720,7 +736,7 @@ function renderRules(){
 }
 
 function openSettings(){
-  renderRules(); renderWallet(); refreshWallet();
+  renderRules(); renderWallet(); refreshWallet(); plan.renderPush(true);
   $('#curSel').value = store.settings().currency; $('#impMsg').textContent = ''; $('#impConfirm').hidden = true; pendingImport = null;
   const hasTx = store.all('transactions').length > 0;
   $('#seedBtn').disabled = hasTx; $('#seedBtn').title = hasTx ? 'Solo disponible sin movimientos registrados' : '';
@@ -786,7 +802,7 @@ function bind(){
   $('#addTop').onclick = () => openTx();
   $('#fab').onclick = () => openTx();
   $('#themeBtn').onclick = () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!document.documentElement.getAttribute('data-theme')){ renderThemeBtn(); charts.dropAll(); render(); } });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!document.documentElement.getAttribute('data-theme')){ renderThemeBtn(); repaintCharts(); } });
   $('#settingsBtn').onclick = openSettings;
   $('#syncBtn').onclick = () => { if (sync.enabled) sync.sync(); openSettings(); };
   window.addEventListener('hashchange', () => setRoute(location.hash.slice(1), true));
@@ -863,7 +879,7 @@ function bind(){
   $('#rDelete').onclick = () => { const r = store.remove('recurring', recEditing); closeDlg($('#recDlg')); if (r) toast('Fijo eliminado (los movimientos ya registrados se conservan)', 'Deshacer', () => store.put('recurring', Object.assign({}, r))); };
 
   // Ajustes
-  $('#curSel').onchange = e => { store.put('settings', {id:'main', currency:e.target.value}); makeNF(); charts.dropAll(); };
+  $('#curSel').onchange = e => { store.put('settings', {id:'main', currency:e.target.value}); makeNF(); repaintCharts(); };
   $('#expCsv').onclick = () => download('gastos-' + today() + '.csv', toCSV(), 'text/csv;charset=utf-8');
   $('#expJson').onclick = () => download('gastos-respaldo-' + today() + '.json', toJSON(), 'application/json');
   $('#impFile').addEventListener('change', async e => {
@@ -920,8 +936,9 @@ function bind(){
 /* ---------- Inicio ---------- */
 async function init(){
   fx.init(); paintIcons();
-  ['#kpis', '#insights', '#recentList', '#legend', '#reviewList', '#txList', '#goalList', '#recList', '#recSummary'].forEach(sel => skipSameHTML($(sel)));
+  ['#kpis', '#insights', '#recentList', '#legend', '#reviewList', '#txList', '#goalList', '#recList', '#recSummary', '#planKpis', '#planAlerts', '#calGrid', '#planDay', '#weekCard'].forEach(sel => skipSameHTML($(sel)));
   store.load(); makeNF();
+  plan.init({money, units, compact, cf:v => cf.format(v), today, view, viewKey, toast, openTx, openRec, openDlg, closeDlg, txRow, render});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); // pide que el sistema no borre los datos locales
   $('#qCat').innerHTML = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
   renderThemeBtn(); bind();
