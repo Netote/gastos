@@ -4,6 +4,7 @@ import * as sync from './sync.js';
 import * as charts from './charts.js';
 import * as fx from './fx.js';
 import * as plan from './plan.js';
+import * as Fi from './finance.js';
 import {ico, paintIcons} from './icons.js';
 
 const {esc, CAT, EXP, INC, catOf} = U;
@@ -25,8 +26,8 @@ function skipSameHTML(el){
 const now = U.todayParts();
 const view = {y:now.y, m:now.m};
 const filters = {q:'', type:'all', cat:'all', sort:'date-desc', allMonths:false};
-const VIEWS = ['resumen', 'movimientos', 'presupuestos', 'metas', 'planear', 'fijos'];
-const TAB_OF = {resumen:'resumen', movimientos:'movimientos', planear:'planear', fijos:'planear', metas:'metas', presupuestos:'metas'};
+const VIEWS = ['resumen', 'movimientos', 'presupuestos', 'metas', 'planear', 'fijos', 'deudas'];
+const TAB_OF = {resumen:'resumen', movimientos:'movimientos', planear:'planear', fijos:'planear', deudas:'planear', metas:'metas', presupuestos:'metas'};
 const PLAN_AHEAD = 12; // meses hacia adelante que se pueden ver en «Planear»
 let route = 'resumen', lastRoute = null, listLimit = 80, renderQueued = false, pickQType;
 const today = () => U.todayStr();
@@ -77,7 +78,8 @@ function render(){ if (renderQueued) return; renderQueued = true; requestAnimati
 function renderNow(){
   renderPeriod(); renderSync(); renderBanner();
   $$('.cur-sym').forEach(s => s.textContent = curSymbol());
-  ({resumen:renderResumen, movimientos:renderList, presupuestos:renderBudgets, metas:renderGoals, planear:plan.renderPlan, fijos:renderRecurring})[route]();
+  ({resumen:renderResumen, movimientos:renderList, presupuestos:renderBudgets, metas:renderGoals, planear:plan.renderPlan, fijos:renderRecurring, deudas:renderDebts})[route]();
+  renderLiquid();
   fx.counters($('.view[data-view="' + route + '"]'), money);
   $('#foot').textContent = !store.storageOk ? 'Tu navegador bloqueó el almacenamiento: exporta un respaldo desde «Datos y ajustes».'
     : sync.enabled ? 'Tus datos se guardan en este dispositivo y se sincronizan con tu cuenta.' : 'Tus datos se guardan solo en este dispositivo.';
@@ -162,12 +164,12 @@ function renderInsights(){
     if (sf.negative) out.push(item('alert', 'bad', 'Te faltaría dinero el ' + dayShort(sf.negative.from), '<p>Tu saldo bajaría a <strong>' + money(sf.negative.min) + '</strong>. <a href="#planear">Ver qué pagos son</a></p>'));
     else if (sf.low) out.push(item('calendar', 'warn', 'Unos días justos', '<p>Del ' + dayShort(sf.low.from) + ' al ' + dayShort(sf.low.to) + ' te quedaría poco dinero. <a href="#planear">Ver calendario</a></p>'));
   }
-  const by = U.byCategory(list), buds = store.all('budgets').filter(b => b.amount > 0);
-  const over = buds.filter(b => (by[b.id] || 0) > b.amount).sort((a, b) => (by[b.id] - b.amount) - (by[a.id] - a.amount));
-  const near = buds.filter(b => { const p = (by[b.id] || 0) / b.amount; return p >= .8 && p <= 1; });
+  const lims = Object.values(limitsFor(key));
+  const over = lims.filter(l => l.left < 0).sort((a, b) => a.left - b.left);
+  const near = lims.filter(l => l.kind === 'limite' && l.limit > 0 && l.left >= 0 && l.spent / l.limit >= .8);
   if (over.length){
     const b = over[0], more = over.length > 1 ? ' y ' + (over.length - 1) + (over.length > 2 ? ' más' : ' otra') : '';
-    out.push(item('alert', 'bad', 'Te pasaste en ' + esc(catOf(b.id).name) + more, '<p>Gastaste <strong>' + money(by[b.id] - b.amount) + '</strong> más de tu límite. <a href="#presupuestos">Revisar</a></p>'));
+    out.push(item('alert', 'bad', 'Te pasaste en ' + esc(catOf(b.id).name) + more, '<p>Gastaste <strong>' + money(-b.left) + '</strong> de más. <button type="button" class="linklike" data-cover="' + esc(b.id) + '">Cubrirlo con otro límite</button></p>'));
   } else if (near.length){
     out.push(item('gauge', 'warn', 'Casi llegas a tu límite', '<p>' + esc(near.map(b => catOf(b.id).name).join(', ')) + '. <a href="#presupuestos">Revisar</a></p>'));
   }
@@ -197,6 +199,54 @@ function renderTopCats(){
       '<span class="catdot">' + ico(c.icon, 18) + '</span><span class="cat-row-main"><span class="cat-row-top"><span>' + esc(c.name) + '</span><span class="cat-row-amt">' + money(v) + '</span></span>' +
       '<span class="bar thin"><span style="width:' + Math.max(3, v / max * 100) + '%"></span></span></span></button></li>';
   }).join('') + (rows.length > 5 ? '<li class="hint cat-more">Y ' + (rows.length - 5) + (rows.length - 5 === 1 ? ' categoría más' : ' categorías más') + ' en Movimientos.</li>' : '');
+}
+
+/**
+ * Gastos hormiga: compras chicas que se repiten en los últimos 30 días. Tocar una abre sus movimientos.
+ * El tope de «chica» depende de la moneda: $200 en pesos, 15 en dólares o euros.
+ */
+function renderAnt(){
+  const box = $('#antCard'), cur = store.settings().currency || 'MXN';
+  const r = Fi.antSpending(store.all('transactions'), today(), {max:cur === 'MXN' ? 20000 : 1500});
+  box.hidden = !r.groups.length; if (!r.groups.length) return;
+  const rows = r.groups.slice(0, 3).map(g => {
+    const c = catOf(g.category), label = g.label || c.name, attr = g.label ? ' data-ant-q="' + esc(g.label) + '"' : ' data-ant-cat="' + esc(g.category) + '"';
+    return '<li><button type="button" class="ant-row"' + attr + ' style="--c:' + c.color + '" aria-label="' + esc(label) + ': ' + g.count + ' compras, ' + money(g.total) + '. Ver movimientos">' +
+      '<span class="catdot">' + ico(c.icon, 18) + '</span><span class="ant-main"><span class="ant-name">' + esc(label) + '</span><span class="ant-meta">' + g.count + ' veces</span></span><span class="ant-amt">' + money(g.total) + '</span></button></li>';
+  }).join('');
+  box.innerHTML = '<div class="card-head"><div><h2 id="antTitle">Gastos hormiga</h2><p class="sub">Compras chicas que se repiten · últimos 30 días</p></div><span class="ant-ico">' + ico('bug', 20) + '</span></div>' +
+    '<ul class="ant-list">' + rows + '</ul><p class="ant-year">A este ritmo serían <strong>' + money(Math.round(r.yearly / 100) * 100) + '</strong> al año.</p>';
+}
+
+/* ---------- Fondo «nivel de dinero» ---------- */
+/**
+ * El fondo es un líquido cuyo nivel es lo que te queda del dinero del mes (lo que entró más los ingresos fijos que
+ * faltan, menos lo que ya gastaste). Si no hay ingresos registrados usa tus límites de gasto. Siempre del mes actual.
+ * Color: bien, justo (queda poco o se ve un tramo justo) o faltante. Se mueve solo cuando cambia el valor.
+ */
+let liquidLast = '';
+function renderLiquid(){
+  const el = $('#liquid'), on = document.documentElement.getAttribute('data-bg') !== 'plain';
+  $('#levelHint').hidden = !on;
+  if (!el || !on) return;
+  const t = today(), key = t.slice(0, 7), list = store.byMonth(key).filter(x => x.date <= t), s = U.sums(list);
+  let pending = 0;
+  for (const r of store.all('recurring')){
+    if (!r.active || r.type !== 'income') continue;
+    const i = U.monthDiff(r.start_month.slice(0, 7), key);
+    if (i >= 0 && (!r.occurrences || i < r.occurrences) && U.dueDate(r, key) > t) pending += r.amount;
+  }
+  let total = s.inc + pending, used = s.exp;
+  if (!total){ const L = Object.values(limitsFor(key)).filter(l => l.kind === 'limite'); total = L.reduce((a, l) => a + l.limit, 0); used = L.reduce((a, l) => a + l.spent, 0); }
+  const level = total > 0 ? Math.max(0, Math.min(1, 1 - used / total)) : .5;
+  const sf = plan.nextShortfall();
+  const state = sf.negative || (total > 0 && used > total) ? 'bad' : sf.low || (total > 0 && level < .2) ? 'warn' : 'good';
+  const vis = .06 + level * .86, sig = state + vis.toFixed(3);
+  if (sig === liquidLast) return;
+  liquidLast = sig;
+  el.dataset.state = state;
+  el.style.transform = 'translateY(' + ((1 - vis) * 100).toFixed(2) + '%)';
+  if (!el.classList.contains('ready')) requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('ready'))); // la primera vez, sin animar
 }
 
 /* ---------- Análisis del mes (plegado: solo se calcula y dibuja al abrirlo) ---------- */
@@ -301,7 +351,7 @@ function renderAnalysis(){
   else ['#barsBox', '#flowBox'].forEach(s => { $(s).hidden = true; });
 }
 function renderResumen(){
-  renderBalance(); renderBalStatus(); renderReview(); renderDuo(); renderInsights(); renderTopCats(); plan.renderWeekCard();
+  renderBalance(); renderBalStatus(); renderReview(); renderDuo(); renderInsights(); renderTopCats(); renderAnt(); plan.renderWeekCard();
   const recent = store.all('transactions').sort(cmpDateDesc).slice(0, 3);
   $('#recentList').innerHTML = recent.length ? recent.map(t => txRow(t, true)).join('') : emptyTx();
   renderAnalysis();
@@ -415,36 +465,203 @@ function renderList(){
   more.textContent = 'Mostrar más (' + (all.length - listLimit) + ' restantes)';
 }
 
+/* ---------- Apartados propios ---------- */
+/** Carga los apartados propios en las listas de categorías y refresca el filtro de Movimientos. */
+function loadCats(){
+  U.setCustomCats(store.allRaw('categories'));
+  const sel = $('#qCat'), cur = sel.value || filters.cat;
+  const html = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
+  if (sel._html !== html){ sel._html = html; sel.innerHTML = html; }
+  sel.value = CAT[cur] ? cur : 'all';
+  if (sel.value === 'all') filters.cat = 'all';
+}
+/** Límite efectivo de cada categoría en el mes: base ± dinero movido; los apartados que acumulan arrastran lo no gastado. */
+const limitsFor = key => Fi.monthlyLimits(key, {budgets:store.all('budgets'), cats:CAT, moves:store.all('budget_moves'), tx:store.all('transactions')});
+
 /* ---------- Límites de gasto (presupuestos) ---------- */
-/** Arriba, solo las categorías que ya tienen límite; las demás esperan plegadas en «Poner un límite». */
+/** Arriba, las categorías y apartados con límite; las demás esperan plegadas en «Poner límite a otra categoría». */
 function renderBudgets(){
-  const spentBy = U.byCategory(store.byMonth(viewKey()));
+  const key = viewKey(), L = limitsFor(key), t = today();
   let tb = 0, ts = 0;
   // No repintar el campo que se está editando.
   const active = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.bud : null;
-  const input = (c, bud) => '<input id="bud-' + c.id + '" class="bud-input" data-bud="' + c.id + '" type="text" inputmode="decimal" autocomplete="off" placeholder="Sin límite" value="' + U.centsToInput(bud) + '" aria-label="Límite mensual de ' + esc(c.name) + '">';
+  const input = (c, bud, label) => '<input id="bud-' + c.id + '" class="bud-input" data-bud="' + esc(c.id) + '" type="text" inputmode="decimal" autocomplete="off" placeholder="Sin límite" value="' + U.centsToInput(bud) + '" aria-label="' + label + ' de ' + esc(c.name) + '">';
+  const edit = c => c.custom ? '<button type="button" class="icon-btn bud-edit" data-edit-cat="' + esc(c.id) + '" aria-label="Editar el apartado ' + esc(c.name) + '" title="Editar">' + ico('pencil', 16) + '</button>' : '';
+  const tag = c => c.custom ? '<span class="badge">' + (c.kind === 'acumula' ? 'Ahorro' : 'Apartado') + '</span>' : '';
   const withB = [], free = [];
   EXP.forEach(c => {
-    const spent = spentBy[c.id] || 0, b = store.get('budgets', c.id), bud = b ? b.amount : 0;
-    if (!(bud > 0)){ free.push('<li class="bud-row" style="--c:' + c.color + '"><div class="bud-top"><span class="catdot">' + ico(c.icon, 18) + '</span><label class="bud-name" for="bud-' + c.id + '">' + esc(c.name) + '</label>' + input(c, 0) + '</div></li>'); return; }
-    tb += bud; ts += spent;
-    const pct = spent / bud * 100, cls = pct > 100 ? 'over' : pct >= 80 ? 'warn' : '';
-    const text = pct > 100 ? 'Te pasaste por ' + money(spent - bud) : pct === 100 ? 'Ya llegaste al límite' : 'Te quedan ' + money(bud - spent);
-    withB.push('<li class="bud-row" style="--c:' + c.color + '"><div class="bud-top"><span class="catdot">' + ico(c.icon, 18) + '</span><div class="bud-name"><label for="bud-' + c.id + '">' + esc(c.name) + '</label><p class="bud-msg ' + cls + '">' + (cls ? ico('alert', 14) : '') + text + '</p></div>' + input(c, bud) + '</div>' +
-      '<div class="bar ' + cls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(Math.round(pct), 100) + '" aria-label="' + esc(c.name) + ': ' + Math.round(pct) + '% del límite"><span style="width:' + Math.min(100, pct) + '%"></span></div></li>');
+    const l = L[c.id];
+    if (!l){ free.push('<li class="bud-row" style="--c:' + c.color + '"><div class="bud-top"><span class="catdot">' + ico(c.icon, 18) + '</span><label class="bud-name" for="bud-' + c.id + '">' + esc(c.name) + ' ' + tag(c) + '</label>' + edit(c) + input(c, 0, 'Límite mensual') + '</div></li>'); return; }
+    let pct, cls, text, sub = '';
+    if (l.kind === 'acumula'){
+      const goal = l.target || Math.max(l.saved, 1);
+      pct = Math.max(0, l.left) / goal * 100;
+      cls = l.left < 0 ? 'over' : 'save';
+      text = l.left < 0 ? 'Te pasaste por ' + money(-l.left) : 'Llevas ' + money(l.left) + (l.target ? ' de ' + money(l.target) : '');
+      sub = !l.due ? 'Apartas ' + money(l.base) + ' al mes' : l.due < t ? 'Ya pasó la fecha: edítalo para el siguiente pago' : 'Para el ' + dayShort(l.due) + ' · apartas ' + money(l.base) + ' al mes';
+    } else {
+      tb += l.limit; ts += l.spent;
+      pct = l.limit > 0 ? l.spent / l.limit * 100 : (l.spent ? 101 : 0);
+      cls = pct > 100 ? 'over' : pct >= 80 ? 'warn' : '';
+      text = pct > 100 ? 'Te pasaste por ' + money(l.spent - l.limit) : pct === 100 ? 'Ya llegaste al límite' : 'Te quedan ' + money(l.left);
+      if (l.limit !== l.base) sub = 'Este mes: ' + money(l.limit) + ' (movido ' + (l.limit > l.base ? '+' : '−') + money(Math.abs(l.limit - l.base)) + ')';
+    }
+    const cover = l.left < 0 ? '<button type="button" class="btn sm bud-cover" data-cover="' + esc(c.id) + '">' + ico('move', 16) + '<span>Cubrir</span></button>' : '';
+    withB.push('<li class="bud-row" style="--c:' + c.color + '"><div class="bud-top"><span class="catdot">' + ico(c.icon, 18) + '</span><div class="bud-name"><label for="bud-' + c.id + '">' + esc(c.name) + ' ' + tag(c) + '</label>' +
+      '<p class="bud-msg ' + (cls === 'save' ? '' : cls) + '">' + (cls === 'over' || cls === 'warn' ? ico('alert', 14) : '') + text + '</p>' + (sub ? '<p class="bud-sub">' + sub + '</p>' : '') + '</div>' + edit(c) +
+      input(c, l.base, l.kind === 'acumula' ? 'Apartado mensual' : 'Límite mensual') + '</div>' +
+      '<div class="bar ' + cls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(Math.round(pct), 100) + '" aria-label="' + esc(c.name) + ': ' + Math.round(pct) + (l.kind === 'acumula' ? '% juntado' : '% del límite') + '"><span style="width:' + Math.min(100, pct) + '%"></span></div>' + cover + '</li>');
   });
-  $('#budList').innerHTML = withB.length ? withB.join('') : '<li class="empty sm">' + ico('pie', 26) + 'Aún no tienes límites. Ponle uno a lo que más te cuesta controlar, como comida o salidas.</li>';
+  $('#budList').innerHTML = withB.length ? withB.join('') : '<li class="empty sm">' + ico('pie', 26) + 'Aún no tienes límites. Crea un apartado («Café», «Mascota», «Predial») o ponle límite a lo que más te cuesta controlar.</li>';
   $('#budFree').innerHTML = free.join('');
   $('#budMore').hidden = !free.length;
-  $('#budMoreLbl').textContent = withB.length ? 'Poner límite a otra categoría' : 'Poner un límite';
-  if (!withB.length && !$('#budMore').dataset.touched) $('#budMore').open = true;
+  $('#budMoreLbl').textContent = withB.length ? 'Poner límite a otra categoría' : 'Poner límite a una categoría';
   if (active){ const el = $('#bud-' + active); if (el) el.focus(); }
   const tot = $('#budTotal'); tot.hidden = tb === 0;
   if (tb){
     const pct = ts / tb * 100, cls = pct > 100 ? 'over' : pct >= 80 ? 'warn' : '';
-    tot.innerHTML = '<p>Llevas <strong>' + money(ts) + '</strong> de ' + money(tb) + '</p><div class="bar ' + cls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, Math.round(pct)) + '" aria-label="Límite total usado"><span style="width:' + Math.min(100, pct) + '%"></span></div>';
+    tot.innerHTML = '<p>Llevas <strong>' + money(ts) + '</strong> de ' + money(tb) + ' en tus límites del mes</p><div class="bar ' + cls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, Math.round(pct)) + '" aria-label="Límite total usado"><span style="width:' + Math.min(100, pct) + '%"></span></div>';
   }
-  $('#budSub').textContent = 'Cuánto quieres gastar en ' + U.monthLabel(viewKey()).replace(/ \d{4}$/, '').toLowerCase() + ' en cada cosa. Te aviso al llegar al 80%.';
+  $('#budSub').textContent = 'Cuánto quieres gastar en ' + U.monthLabel(key).replace(/ \d{4}$/, '').toLowerCase() + ' en cada cosa. Te aviso al llegar al 80%.';
+}
+
+/* ---------- Diálogo de apartado ---------- */
+const CAT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#F97316', '#84CC16', '#EF4444', '#64748B'];
+let catEditing = null, catKind = 'limite', pickCatKind;
+const KIND_HINT = {
+  limite:'Un tope para lo que gastas cada mes en esto. Se reinicia el día 1.',
+  acumula:'Para un pago grande que llega una vez (predial, seguro, tenencia, regalos de diciembre): apartas un poco cada mes y lo que no gastas se va juntando.'
+};
+function renderCatKind(){
+  $('#kKindHint').textContent = KIND_HINT[catKind];
+  $('#kLimitBox').hidden = catKind !== 'limite'; $('#kSaveBox').hidden = catKind !== 'acumula';
+  renderCatPlan();
+}
+const catStart = () => { const c = catEditing && store.get('categories', catEditing); return (c && c.start_month || today().slice(0, 7) + '-01').slice(0, 7); };
+/** «Apartarás $X al mes durante N meses»: se recalcula al escribir el costo o la fecha. */
+function renderCatPlan(){
+  const box = $('#kPlan'), target = U.parseAmount($('#kTarget').value), due = $('#kDue').value;
+  const m = catKind === 'acumula' && target > 0 && due ? Fi.monthlyForTarget(U.toCents(target), catStart(), due) : null;
+  box.hidden = !m; if (!m) return;
+  const months = Math.max(1, U.monthDiff(catStart(), due.slice(0, 7)) + 1);
+  box.innerHTML = ico('check', 16) + '<span>Apartarás <strong>' + money(m) + '</strong> al mes durante ' + months + (months === 1 ? ' mes' : ' meses') + '.</span>';
+}
+function openCat(id){
+  const c = id ? store.get('categories', id) : null, b = c ? store.get('budgets', c.id) : null; catEditing = c ? c.id : null;
+  $('#catTitle').textContent = c ? 'Editar apartado' : 'Nuevo apartado';
+  $('#kName').value = c ? c.name : '';
+  pickCatKind(c && c.kind === 'acumula' ? 'acumula' : 'limite');
+  $('#kAmount').value = b && !(c && c.kind === 'acumula') ? U.centsToInput(b.amount) : '';
+  $('#kTarget').value = c && c.target ? U.centsToInput(c.target) : ''; $('#kDue').value = c && c.due ? c.due : '';
+  const icon = c ? c.icon : 'coffee', col = c ? c.color : CAT_COLORS[store.all('categories').length % CAT_COLORS.length];
+  $('#kIcons').innerHTML = U.CUSTOM_ICONS.map(n => '<label class="icon-opt"><input type="radio" name="kicon" value="' + n + '"' + (n === icon ? ' checked' : '') + ' aria-label="Ícono ' + n + '"><span>' + ico(n, 20) + '</span></label>').join('');
+  $('#kColors').innerHTML = CAT_COLORS.map((cc, i) => '<label style="--c:' + cc + '"><input type="radio" name="kcolor" value="' + cc + '"' + (cc === col ? ' checked' : '') + ' aria-label="Color ' + (i + 1) + '">' + ico('check', 20) + '<span class="ring"></span></label>').join('');
+  ['kName', 'kAmount', 'kTarget', 'kDue'].forEach(k => setErr(k, ''));
+  $('#kDelete').hidden = !c; $('#kSubmit').textContent = c ? 'Guardar cambios' : 'Crear apartado';
+  renderCatKind();
+  openDlg($('#catDlg')); if (!c) setTimeout(() => $('#kName').focus(), 50);
+}
+function submitCat(){
+  const name = $('#kName').value.trim(), due = $('#kDue').value;
+  const e = {kName:name ? '' : 'Ponle un nombre.', kAmount:'', kTarget:'', kDue:''};
+  if (catKind === 'limite') e.kAmount = amountRule('kAmount');
+  else { e.kTarget = amountRule('kTarget'); e.kDue = !/^\d{4}-\d{2}-\d{2}$/.test(due) ? 'Elige la fecha del pago.' : due < today() ? 'Elige una fecha que no haya pasado.' : ''; }
+  Object.entries(e).forEach(([k, m]) => setErr(k, m));
+  const first = Object.keys(e).find(k => e[k]); if (first){ $('#' + first).focus(); return; }
+  const id = catEditing || ('c-' + U.uid()).slice(0, 40), start = catStart() + '-01';
+  const target = catKind === 'acumula' ? U.toCents(U.parseAmount($('#kTarget').value)) : null;
+  const monthly = catKind === 'acumula' ? Fi.monthlyForTarget(target, start, due) : U.toCents(U.parseAmount($('#kAmount').value));
+  store.put('categories', {id, name:name.slice(0, 40), color:($('input[name="kcolor"]:checked') || {}).value || CAT_COLORS[0], icon:($('input[name="kicon"]:checked') || {}).value || 'more',
+    kind:catKind, target, due:catKind === 'acumula' ? due : null, start_month:start});
+  store.put('budgets', {id, amount:monthly});
+  closeDlg($('#catDlg'));
+  toast(catEditing ? 'Apartado actualizado' : catKind === 'acumula' ? 'Listo: aparta ' + money(monthly) + ' al mes' : 'Apartado creado');
+}
+function deleteCat(){
+  const c = store.remove('categories', catEditing); if (!c) return;
+  const b = store.remove('budgets', c.id);
+  closeDlg($('#catDlg'));
+  toast('Apartado eliminado (sus movimientos se conservan)', 'Deshacer', () => { store.put('categories', Object.assign({}, c)); if (b) store.put('budgets', Object.assign({}, b)); });
+}
+
+/* ---------- Cubrir un sobregasto con lo que sobra en otro límite ---------- */
+let covTo = null;
+function openCover(id){
+  const key = viewKey(), L = limitsFor(key), l = L[id]; if (!l) return;
+  covTo = id;
+  const need = Math.max(0, -l.left), src = Object.values(L).filter(x => x.id !== id && x.left > 0).sort((a, b) => b.left - a.left);
+  $('#covTitle').textContent = 'Cubrir ' + catOf(id).name;
+  $('#covText').innerHTML = need ? 'Te pasaste por <strong>' + money(need) + '</strong> en ' + U.monthLabel(key).replace(/ \d{4}$/, '').toLowerCase() + '. Toma lo que te sobra de otro límite.' : 'Pasa dinero que te sobra de otro límite a este.';
+  $('#covText').dataset.need = need;
+  $('#covList').innerHTML = src.length ? src.map((x, i) => { const c = catOf(x.id); return '<li><label class="cov-opt" style="--c:' + c.color + '"><input type="radio" name="covFrom" value="' + esc(x.id) + '" data-left="' + x.left + '"' + (i === 0 ? ' checked' : '') + '><span class="catdot">' + ico(c.icon, 18) + '</span><span class="cov-name">' + esc(c.name) + '</span><span class="cov-left">le sobran ' + money(x.left) + '</span></label></li>'; }).join('')
+    : '<li class="empty sm">Ningún otro límite tiene dinero de sobra este mes.</li>';
+  ['covList', 'covAmount'].forEach(k => setErr(k, ''));
+  $('#covSubmit').disabled = !src.length;
+  fillCoverAmount();
+  openDlg($('#covDlg'));
+}
+function fillCoverAmount(){
+  const r = $('input[name="covFrom"]:checked'), need = Number($('#covText').dataset.need) || 0;
+  $('#covAmount').value = r ? U.centsToInput(need ? Math.min(need, Number(r.dataset.left)) : Number(r.dataset.left)) : '';
+}
+function submitCover(){
+  const r = $('input[name="covFrom"]:checked');
+  if (!r){ setErr('covList', 'Elige de dónde tomarlo.'); return; }
+  const amt = U.toCents(U.parseAmount($('#covAmount').value)), left = Number(r.dataset.left);
+  const m = !(amt > 0) ? 'Escribe un monto mayor a 0.' : amt > left ? 'A ' + catOf(r.value).name + ' solo le sobran ' + money(left) + '.' : '';
+  setErr('covAmount', m); if (m){ $('#covAmount').focus(); return; }
+  const mv = store.put('budget_moves', {id:U.uid(), month:viewKey(), from_cat:r.value, to_cat:covTo, amount:amt});
+  closeDlg($('#covDlg'));
+  toast('Moviste ' + money(amt) + ' de ' + catOf(r.value).name + ' a ' + catOf(covTo).name, 'Deshacer', () => store.remove('budget_moves', mv.id));
+}
+
+/* ---------- Plan para salir de deudas ---------- */
+const DEBT_EXTRA = 'gastos:debtExtra';
+/** En el plan de deudas los saldos e intereses son estimaciones: se muestran en pesos enteros. */
+const pesos = c => money(Math.round(c / 100) * 100);
+const debtExtra = () => { const n = U.parseAmount($('#debtExtra').value); return n > 0 && n < 1e9 ? U.toCents(n) : 0; };
+function saveDebtExtra(){ try { localStorage.setItem(DEBT_EXTRA, $('#debtExtra').value.trim()); } catch(e){} }
+/**
+ * Compara avalancha (primero la de mayor interés) contra bola de nieve (primero la más chica) con lo que puedes pagar
+ * de más al mes. Recomienda avalancha solo si el ahorro en intereses es claro; si no, bola de nieve (motiva más).
+ */
+function renderDebts(){
+  const t = today(), list = Fi.debtList(store.all('recurring'), t);
+  $('#debtEmpty').hidden = !!list.length; $('#debtMain').hidden = !list.length;
+  if (!list.length){
+    $('#debtEmpty').innerHTML = ico('flag', 32) + '<p>No tienes deudas a plazo registradas.</p><p class="muted">Agrega tus compras a meses o créditos con su número de pagos y te digo cómo liquidarlos más rápido.</p><button type="button" class="btn primary" data-new-debt>' + ico('plus', 18) + '<span>Agregar deuda</span></button>';
+    return;
+  }
+  const extra = debtExtra(), total = list.reduce((s, d) => s + d.balance, 0), monthly = list.reduce((s, d) => s + d.payment, 0);
+  const first = list.map(d => U.nextDue(store.get('recurring', d.id), t).date.slice(0, 7)).sort()[0];
+  const end = months => U.monthLabel(U.addMonths(first, months - 1)).toLowerCase();
+  const min = Fi.payoffPlan(list, 0, 'minimo'), av = Fi.payoffPlan(list, extra, 'avalancha'), bo = Fi.payoffPlan(list, extra, 'bola');
+  $('#debtSum').innerHTML = '<p class="plan-lbl">Debes</p><p class="plan-val">' + pesos(total) + '</p><p class="plan-sub">' + list.length + (list.length === 1 ? ' deuda' : ' deudas') + ' · pagas ' + money(monthly) + ' al mes</p>' +
+    '<p class="debt-min">Sin pagar de más terminas en <strong>' + end(min.months) + '</strong>' + (min.interest > 0 ? ' y pagas ' + pesos(min.interest) + ' de intereses.' : ', sin intereses.') + '</p>';
+  const cur = store.settings().currency || 'MXN', steps = cur === 'MXN' ? [50000, 100000, 200000] : [5000, 10000, 20000];
+  const chips = steps.map(v => '<button type="button" class="chip-btn" data-extra="' + v + '">+' + money(v) + '</button>').join('');
+  if ($('#debtChips')._html !== chips){ $('#debtChips')._html = chips; $('#debtChips').innerHTML = chips; }
+
+  const allZero = list.every(d => !d.rate), saving = bo.interest - av.interest;
+  const rec = list.length === 1 ? 'av' : allZero ? 'bo' : saving >= Math.max(50000, total * .01) ? 'av' : 'bo';
+  const name = id => esc((list.find(d => d.id === id) || {}).name || '');
+  $('#debtWhy').innerHTML = list.length === 1 ? '' : allZero
+    ? ico('info', 16) + '<span>Tus deudas no cobran intereses: adelantar pagos no te ahorra dinero, pero liberas mensualidades antes. Empieza por la más chica.</span>'
+    : rec === 'av' ? ico('check', 16) + '<span>Empezar por la de mayor interés te ahorra <strong>' + pesos(saving) + '</strong> en intereses.</span>'
+    : ico('check', 16) + '<span>La diferencia en intereses es pequeña (' + pesos(Math.max(0, saving)) + '): empezar por la más chica te deja ver avances antes.</span>';
+  const card = (key, title, desc, r) => {
+    const faster = min.months - r.months, best = rec === key, order = r.order.map((id, i) => '<li><span>' + (i + 1) + '. ' + name(id) + '</span><span>' + end(r.finish[id]) + '</span></li>').join('');
+    return '<article class="card strat' + (best ? ' best' : '') + '">' + (best ? '<span class="badge new">Te conviene</span>' : '') + '<h3>' + title + '</h3><p class="sub">' + desc + '</p>' +
+      '<p class="strat-end">Terminas en <strong>' + end(r.months) + '</strong></p><p class="strat-meta">' + (faster > 0 ? faster + (faster === 1 ? ' mes antes' : ' meses antes') : 'Igual que sin pagar de más') + ' · ' + (r.interest ? 'intereses ' + pesos(r.interest) : 'sin intereses') + '</p>' +
+      '<ol class="strat-order upcoming">' + order + '</ol></article>';
+  };
+  $('#debtCmp').innerHTML = list.length === 1
+    ? card('av', 'Con ' + money(extra) + ' de más al mes', 'Todo va a tu única deuda', av)
+    : card('av', 'Avalancha', 'Primero la de mayor interés: pagas menos intereses', av) + card('bo', 'Bola de nieve', 'Primero la más chica: la liquidas antes y te motiva', bo);
+
+  $('#debtList').innerHTML = list.map(d => { const c = catOf((store.get('recurring', d.id) || {}).category);
+    return '<div class="rec" style="--c:' + c.color + '"><span class="catdot">' + ico(c.icon, 20) + '</span><div style="min-width:0"><p class="rec-name">' + esc(d.name) + '</p><p class="rec-meta">Faltan ' + d.remaining + ' de ' + d.of + ' pagos de ' + money(d.payment) + ' · ' + (d.rate ? d.rate + '% anual' : 'sin intereses') + '</p></div>' +
+      '<p class="tx-amt">' + pesos(d.balance) + '</p><div class="rec-acts"><button type="button" class="icon-btn" data-rec="' + esc(d.id) + '" aria-label="Editar ' + esc(d.name) + ' (pagos y tasa)">' + ico('pencil', 18) + '</button></div></div>'; }).join('');
 }
 
 /* ---------- Metas ---------- */
@@ -639,20 +856,27 @@ function openRec(id, preset){
   $('#rName').value = r ? r.name : (p.name || '').slice(0, 60); $('#rAmount').value = r ? U.centsToInput(r.amount) : p.amount ? U.centsToInput(p.amount) : '';
   $('#rDay').value = r ? r.day : p.day || Number(today().slice(8, 10)); $('#rStart').value = r ? r.start_month.slice(0, 7) : p.start || today().slice(0, 7);
   $('#rOcc').value = r && r.occurrences ? r.occurrences : p.occ || '';
-  ['rName', 'rAmount', 'rCat', 'rDay', 'rStart', 'rOcc'].forEach(k => setErr(k, ''));
+  $('#rRate').value = r && r.rate ? String(r.rate) : '';
+  $('#recTitle').textContent = r ? (r.occurrences ? 'Editar deuda o fijo' : 'Editar fijo') : p.debt ? 'Nueva deuda' : 'Nuevo fijo';
+  syncRateField();
+  ['rName', 'rAmount', 'rCat', 'rDay', 'rStart', 'rOcc', 'rRate'].forEach(k => setErr(k, ''));
   $('#rDelete').hidden = !r;
   openDlg($('#recDlg')); if (!r) setTimeout(() => $('#rName').focus(), 50);
 }
+/** La tasa solo tiene sentido en algo con número de pagos (compras a meses, créditos). */
+function syncRateField(){ $('#rRateField').hidden = !$('#rOcc').value.trim(); }
 function submitRec(){
   const day = Number($('#rDay').value), occ = $('#rOcc').value.trim(), start = $('#rStart').value;
   const e = {rName:$('#rName').value.trim() ? '' : 'Escribe un nombre.', rAmount:amountRule('rAmount'), rCat:$('#rCat').value ? '' : 'Elige una categoría.',
     rDay:Number.isInteger(day) && day >= 1 && day <= 31 ? '' : 'Un día entre 1 y 31.', rStart:/^\d{4}-\d{2}$/.test(start) ? '' : 'Elige el mes de inicio.',
-    rOcc:!occ || (/^\d+$/.test(occ) && +occ >= 1 && +occ <= 600) ? '' : 'Un número entre 1 y 600, o déjalo vacío.'};
+    rOcc:!occ || (/^\d+$/.test(occ) && +occ >= 1 && +occ <= 600) ? '' : 'Un número entre 1 y 600, o déjalo vacío.',
+    rRate:!occ || !$('#rRate').value.trim() || (U.parseAmount($('#rRate').value) >= 0 && U.parseAmount($('#rRate').value) <= 500) ? '' : 'Una tasa entre 0 y 500%, o déjala vacía.'};
   Object.entries(e).forEach(([k, m]) => setErr(k, m));
   const first = Object.keys(e).find(k => e[k]); if (first){ $('#' + first).focus(); return; }
   const prev = recEditing ? store.get('recurring', recEditing) : null;
   store.put('recurring', {id:recEditing || U.uid(), name:$('#rName').value.trim().slice(0, 60), type:recType, category:$('#rCat').value, amount:U.toCents(U.parseAmount($('#rAmount').value)),
-    day, start_month:start + '-01', occurrences:occ ? Number(occ) : null, active:prev ? prev.active : true});
+    day, start_month:start + '-01', occurrences:occ ? Number(occ) : null, active:prev ? prev.active : true,
+    rate:occ && $('#rRate').value.trim() ? Math.round(U.parseAmount($('#rRate').value) * 100) / 100 || null : null});
   closeDlg($('#recDlg')); toast(recEditing ? 'Fijo actualizado' : 'Fijo creado: se registrará cada día ' + day);
   generateRecurring();
 }
@@ -672,13 +896,19 @@ function toCSV(){
 function toJSON(){
   const strip = r => { const {deleted, updated_at, created, ...x} = r; return x; };
   return JSON.stringify({app:'gastos', version:2, exportado:new Date().toISOString(), nota:'Montos en centavos', currency:store.settings().currency, opening_balance:store.settings().opening_balance || 0, opening_date:store.settings().opening_date || null,
-    transactions:store.all('transactions').map(strip), budgets:store.all('budgets').map(strip), goals:store.all('goals').map(strip), recurring:store.all('recurring').map(strip), merchant_rules:store.all('merchant_rules').map(strip)}, null, 2);
+    transactions:store.all('transactions').map(strip), budgets:store.all('budgets').map(strip), goals:store.all('goals').map(strip), recurring:store.all('recurring').map(strip), merchant_rules:store.all('merchant_rules').map(strip),
+    categories:store.all('categories').map(strip), budget_moves:store.all('budget_moves').map(strip)}, null, 2);
 }
 let pendingImport = null;
 function parseBackup(text){
   const d = JSON.parse(text);
   const srcTx = Array.isArray(d) ? d : d.transactions || d.tx;
   if (!Array.isArray(srcTx)) throw new Error('No encontré movimientos en el archivo.');
+  // Apartados primero: sus ids deben valer como categoría al revisar movimientos, límites y fijos del archivo.
+  const cats = Array.isArray(d.categories) ? d.categories.filter(c => c && typeof c.id === 'string' && /^[\w-]{1,40}$/.test(c.id) && !U.CAT[c.id] && typeof c.name === 'string' && c.name.trim())
+    .map(c => ({id:c.id, name:c.name.trim().slice(0, 40), color:/^#[0-9A-Fa-f]{6}$/.test(c.color) ? c.color : '#94A3B8', icon:U.CUSTOM_ICONS.includes(c.icon) ? c.icon : 'more', kind:c.kind === 'acumula' ? 'acumula' : 'limite',
+      target:Number.isInteger(c.target) && c.target > 0 ? c.target : null, due:/^\d{4}-\d{2}-\d{2}$/.test(c.due) ? c.due : null, start_month:/^\d{4}-\d{2}-\d{2}$/.test(c.start_month) ? c.start_month : null})) : null;
+  if (cats) U.setCustomCats(store.allRaw('categories').concat(cats));
   const seen = new Set(), tx = []; let skipped = 0;
   srcTx.forEach(t => { const c = U.cleanTx(t); if (!c || seen.has(c.id)){ skipped++; return; } seen.add(c.id); tx.push(c); });
   const budgets = [];
@@ -688,14 +918,20 @@ function parseBackup(text){
   const goals = (Array.isArray(d.goals) ? d.goals : []).filter(g => g && okId(g.id) && typeof g.name === 'string' && Number.isInteger(g.target) && g.target > 0)
     .map(g => ({id:g.id, name:g.name.slice(0, 60), target:g.target, saved:Number.isInteger(g.saved) && g.saved > 0 ? g.saved : 0, deadline:/^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : null, color:/^#[0-9A-Fa-f]{6}$/.test(g.color) ? g.color : GOAL_COLORS[0]}));
   const recurring = (Array.isArray(d.recurring) ? d.recurring : []).filter(r => r && okId(r.id) && typeof r.name === 'string' && (r.type === 'income' || r.type === 'expense') && CAT[r.category] && CAT[r.category].type === r.type && Number.isInteger(r.amount) && r.amount > 0 && Number.isInteger(r.day) && r.day >= 1 && r.day <= 31 && /^\d{4}-\d{2}-\d{2}$/.test(r.start_month))
-    .map(r => ({id:r.id, name:r.name.slice(0, 60), type:r.type, category:r.category, amount:r.amount, day:r.day, start_month:r.start_month.slice(0, 7) + '-01', occurrences:Number.isInteger(r.occurrences) && r.occurrences > 0 ? r.occurrences : null, active:r.active !== false}));
+    .map(r => ({id:r.id, name:r.name.slice(0, 60), type:r.type, category:r.category, amount:r.amount, day:r.day, start_month:r.start_month.slice(0, 7) + '-01', occurrences:Number.isInteger(r.occurrences) && r.occurrences > 0 ? r.occurrences : null, active:r.active !== false,
+      rate:typeof r.rate === 'number' && r.rate > 0 && r.rate <= 500 ? r.rate : null}));
   const currency = ['MXN', 'USD', 'EUR'].includes(d.currency) ? d.currency : null;
   const rules = Array.isArray(d.merchant_rules) ? d.merchant_rules.filter(r => r && typeof r.id === 'string' && r.id.length >= 1 && r.id.length <= 60 && CAT[r.category] && CAT[r.category].type === 'expense')
     .map(r => ({id:r.id, name:String(r.name || '').slice(0, 60), category:r.category})) : null; // null = el respaldo no trae reglas: se conservan las actuales
   const opening = Number.isInteger(d.opening_balance) && Math.abs(d.opening_balance) <= 99999999999 ? {opening_balance:d.opening_balance, opening_date:/^\d{4}-\d{2}-\d{2}$/.test(d.opening_date) ? d.opening_date : null} : null;
-  return {tx, budgets, goals, recurring, rules, currency, opening, skipped};
+  const moves = Array.isArray(d.budget_moves) ? d.budget_moves.filter(m => m && okId(m.id) && /^\d{4}-\d{2}$/.test(m.month) && CAT[m.from_cat] && CAT[m.to_cat] && Number.isInteger(m.amount) && m.amount > 0)
+    .map(m => ({id:m.id, month:m.month, from_cat:m.from_cat, to_cat:m.to_cat, amount:m.amount})) : null;
+  loadCats(); // deja las categorías como estaban hasta que se confirme la importación
+  return {tx, budgets, goals, recurring, rules, currency, opening, skipped, cats, moves};
 }
 function applyImport(p){
+  if (p.cats) store.replaceTable('categories', p.cats);
+  if (p.moves) store.replaceTable('budget_moves', p.moves);
   store.replaceTable('transactions', p.tx); store.replaceTable('budgets', p.budgets); store.replaceTable('goals', p.goals); store.replaceTable('recurring', p.recurring);
   if (p.rules) store.replaceTable('merchant_rules', p.rules);
   if (p.currency || p.opening) store.put('settings', Object.assign({id:'main', currency:p.currency || store.settings().currency}, p.opening || {}));
@@ -785,6 +1021,8 @@ function renderRules(){
 function openSettings(){
   if (sync.enabled) sync.sync();
   pickTheme(document.documentElement.getAttribute('data-theme') || 'auto');
+  $('#bgLevel').checked = document.documentElement.getAttribute('data-bg') !== 'plain';
+  $('#dbUpdate').hidden = !(sync.enabled && sync.schemaOutdated());
   renderRules(); renderWallet(); refreshWallet(); plan.renderPush(true);
   $('#curSel').value = store.settings().currency; $('#impMsg').textContent = ''; $('#impConfirm').hidden = true; pendingImport = null;
   const hasTx = store.all('transactions').length > 0;
@@ -881,6 +1119,16 @@ function bind(){
   $('#fCats').addEventListener('change', () => setErr('fCats', ''));
   document.addEventListener('click', e => {
     const tx = e.target.closest('[data-tx]'); if (tx){ openTx(tx.dataset.tx); return; }
+    const cov = e.target.closest('[data-cover]'); if (cov){ openCover(cov.dataset.cover); return; }
+    const ec = e.target.closest('[data-edit-cat]'); if (ec){ openCat(ec.dataset.editCat); return; }
+    const ant = e.target.closest('[data-ant-q], [data-ant-cat]');
+    if (ant){
+      filters.q = ant.dataset.antQ || ''; filters.cat = ant.dataset.antCat || 'all'; filters.allMonths = false; listLimit = 80;
+      $('#qSearch').value = filters.q; $('#qCat').value = filters.cat; $('#qAll').checked = false; pickQType('expense'); filters.type = 'expense';
+      location.hash = '#movimientos'; return;
+    }
+    if (e.target.closest('[data-new-debt]')){ openRec(null, {debt:true, occ:12, category:'deudas'}); return; }
+    const ex = e.target.closest('[data-extra]'); if (ex){ $('#debtExtra').value = U.centsToInput(Number(ex.dataset.extra)); saveDebtExtra(); renderDebts(); return; }
     const lg = e.target.closest('[data-cat]');
     if (lg){ filters.cat = lg.dataset.cat; filters.allMonths = false; $('#qCat').value = filters.cat; $('#qAll').checked = false; pickQType('all'); location.hash = '#movimientos'; return; }
     if (e.target.closest('[data-new-goal]')){ openGoal(); return; }
@@ -909,12 +1157,13 @@ function bind(){
   $('#budMore').addEventListener('toggle', e => { e.currentTarget.dataset.touched = '1'; });
   // Inicio: el análisis solo se calcula al abrirlo
   $('#analysis').addEventListener('toggle', () => { if ($('#analysis').open){ renderAnalysis(); requestAnimationFrame(charts.resizeAll); } });
-  $('#budList').addEventListener('change', e => {
+  // Escucha toda la vista: los campos de «Poner límite a otra categoría» viven fuera de #budList.
+  $('#v-presupuestos').addEventListener('change', e => {
     const inp = e.target.closest('input[data-bud]'); if (!inp) return;
     const id = inp.dataset.bud, raw = inp.value.trim();
     if (!raw){ store.remove('budgets', id); return; }
     const n = U.parseAmount(raw);
-    if (!(n > 0) || n > 999999999){ toast('Escribe un presupuesto válido (mayor a 0) o déjalo vacío.'); renderBudgets(); return; }
+    if (!(n > 0) || n > 999999999){ toast('Escribe un límite válido (mayor a 0) o déjalo vacío.'); renderBudgets(); return; }
     store.put('budgets', {id, amount:U.toCents(n)});
   });
 
@@ -925,8 +1174,31 @@ function bind(){
   pickContrib = bindSeg($('#cSeg'), m => { contribMode = m; $('#cSubmit').textContent = m === 'add' ? 'Abonar' : 'Retirar'; });
   $('#contribForm').addEventListener('submit', e => { e.preventDefault(); submitContrib(); });
 
+  // Apartados propios y cubrir sobregastos
+  $('#newCat').onclick = () => openCat();
+  pickCatKind = bindSeg($('#kSeg'), k => { catKind = k; renderCatKind(); });
+  ['kTarget', 'kDue'].forEach(id => $('#' + id).addEventListener('input', renderCatPlan));
+  $('#catForm').addEventListener('submit', e => { e.preventDefault(); submitCat(); });
+  $('#kDelete').onclick = deleteCat;
+  $('#covList').addEventListener('change', fillCoverAmount);
+  $('#covForm').addEventListener('submit', e => { e.preventDefault(); submitCover(); });
+
+  // Deudas
+  $('#newDebt').onclick = () => openRec(null, {debt:true, occ:12, category:'deudas'});
+  try { $('#debtExtra').value = localStorage.getItem(DEBT_EXTRA) || ''; } catch(e){}
+  let dT = null;
+  $('#debtExtra').addEventListener('input', () => { clearTimeout(dT); dT = setTimeout(() => { saveDebtExtra(); renderDebts(); }, 200); });
+
+  // Fondo
+  $('#bgLevel').addEventListener('change', e => {
+    if (e.target.checked) document.documentElement.removeAttribute('data-bg'); else document.documentElement.setAttribute('data-bg', 'plain');
+    try { if (e.target.checked) localStorage.removeItem('gastos:bg'); else localStorage.setItem('gastos:bg', 'plain'); } catch(err){}
+    liquidLast = ''; renderLiquid();
+  });
+
   // Fijos
   $('#newRec').onclick = () => openRec();
+  $('#rOcc').addEventListener('input', syncRateField);
   pickRecType = bindSeg($('#rSeg'), t => { const changed = recType !== t; recType = t; if (changed) fillRecCats(t, ''); });
   $('#recForm').addEventListener('submit', e => { e.preventDefault(); submitRec(); });
   $('#rDelete').onclick = () => { const r = store.remove('recurring', recEditing); closeDlg($('#recDlg')); if (r) toast('Fijo eliminado (los movimientos ya registrados se conservan)', 'Deshacer', () => store.put('recurring', Object.assign({}, r))); };
@@ -943,7 +1215,7 @@ function bind(){
       pendingImport = parseBackup(await f.text());
       if (!pendingImport.tx.length && !pendingImport.goals.length && !pendingImport.recurring.length){ msg.textContent = 'El respaldo no contiene datos válidos.'; pendingImport = null; return; }
       msg.textContent = '';
-      $('#impConfirmTxt').textContent = 'El archivo trae ' + pendingImport.tx.length + ' movimientos, ' + pendingImport.budgets.length + ' presupuestos, ' + pendingImport.goals.length + ' metas y ' + pendingImport.recurring.length + ' fijos' + (pendingImport.skipped ? ' (' + pendingImport.skipped + ' movimientos inválidos se omitirán)' : '') + '. Reemplazará tus datos actuales' + (sync.enabled ? ' en todos tus dispositivos' : '') + '.';
+      $('#impConfirmTxt').textContent = 'El archivo trae ' + pendingImport.tx.length + ' movimientos, ' + pendingImport.budgets.length + ' presupuestos, ' + pendingImport.goals.length + ' metas, ' + pendingImport.recurring.length + ' fijos' + (pendingImport.cats && pendingImport.cats.length ? ' y ' + pendingImport.cats.length + ' apartados' : '') + (pendingImport.skipped ? ' (' + pendingImport.skipped + ' movimientos inválidos se omitirán)' : '') + '. Reemplazará tus datos actuales' + (sync.enabled ? ' en todos tus dispositivos' : '') + '.';
       $('#impConfirm').hidden = false; $('#impYes').focus();
     } catch(err){ msg.textContent = err instanceof SyntaxError ? 'No pude leer el archivo: no es un JSON válido.' : err.message; }
   });
@@ -989,14 +1261,15 @@ function bind(){
 /* ---------- Inicio ---------- */
 async function init(){
   fx.init(); paintIcons();
-  ['#kpis', '#stats', '#duo', '#topCats', '#insights', '#recentList', '#reviewList', '#txList', '#goalList', '#recList', '#recSummary', '#planKpis', '#planAlerts', '#calGrid', '#planDay', '#weekCard'].forEach(sel => skipSameHTML($(sel)));
-  store.load(); makeNF();
+  ['#kpis', '#stats', '#duo', '#topCats', '#insights', '#recentList', '#reviewList', '#txList', '#goalList', '#recList', '#recSummary', '#planKpis', '#planAlerts', '#calGrid', '#planDay', '#weekCard', '#antCard', '#debtSum', '#debtCmp', '#debtList'].forEach(sel => skipSameHTML($(sel)));
+  store.load(); makeNF(); loadCats();
   plan.init({money, units, compact, cf:v => cf.format(v), today, view, viewKey, toast, openTx, openRec, openDlg, closeDlg, txRow, render});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); // pide que el sistema no borre los datos locales
-  $('#qCat').innerHTML = '<option value="all">Todas</option><optgroup label="Gastos">' + EXP.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup><optgroup label="Ingresos">' + INC.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>';
+
   renderThemeBtn(); bind();
   { const nav = $('.tabs'); if (window.ResizeObserver) new ResizeObserver(() => fx.moveIndicator(nav, true)).observe(nav); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fx.moveIndicator(nav, true)); }
   store.onChange(origin => {
+    loadCats();
     render(); if ($('#setDlg').open){ renderAccount(); renderRules(); }
     if (origin === 'local') sync.soon();
     else setTimeout(generateRecurring); // pudieron llegar fijos nuevos desde otro dispositivo

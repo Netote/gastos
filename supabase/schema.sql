@@ -111,10 +111,46 @@ create unique index if not exists transactions_ext_idx on public.transactions (u
 alter table public.settings add column if not exists opening_balance bigint not null default 0;
 alter table public.settings add column if not exists opening_date    date; -- día del último ajuste (null = nunca)
 
+-- v2.7: apartados propios (categorías de gasto creadas por la persona). Su límite mensual vive en budgets (mismo id).
+--   kind = 'limite'  → límite del mes, se reinicia cada mes.
+--   kind = 'acumula' → apartado que acumula (predial, seguro, tenencia): lo que no gastas pasa al mes siguiente.
+create table if not exists public.categories (
+  user_id     uuid        not null default auth.uid() references auth.users (id) on delete cascade,
+  id          text        not null check (char_length(id) <= 40),
+  name        text        not null check (char_length(name) between 1 and 40),
+  color       text        not null default '#94A3B8' check (color ~ '^#[0-9A-Fa-f]{6}$'),
+  icon        text        not null default 'more' check (char_length(icon) <= 20),
+  kind        text        not null default 'limite' check (kind in ('limite', 'acumula')),
+  target      bigint      check (target is null or target > 0),  -- costo total del gasto que se aparta (solo «acumula»)
+  due         date,                                               -- cuándo hay que pagarlo (solo «acumula»)
+  start_month date,                                               -- desde qué mes se aparta
+  deleted     boolean     not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+-- v2.7: dinero movido entre límites en un mes («cubrir» un sobregasto con lo que sobra en otro).
+create table if not exists public.budget_moves (
+  user_id    uuid        not null default auth.uid() references auth.users (id) on delete cascade,
+  id         text        not null check (char_length(id) <= 64),
+  month      text        not null check (month ~ '^\d{4}-\d{2}$'),
+  from_cat   text        not null check (char_length(from_cat) <= 40),
+  to_cat     text        not null check (char_length(to_cat) <= 40),
+  amount     bigint      not null check (amount > 0),
+  deleted    boolean     not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+-- v2.7: tasa de interés anual (%) de una deuda a plazo, para el plan de pago (null o 0 = sin intereses).
+alter table public.recurring add column if not exists rate numeric(6, 2) check (rate is null or (rate >= 0 and rate <= 500));
+
 do $$
 declare t text;
 begin
-  foreach t in array array['transactions', 'budgets', 'goals', 'recurring', 'settings', 'merchant_rules'] loop
+  foreach t in array array['transactions', 'budgets', 'goals', 'recurring', 'settings', 'merchant_rules', 'categories', 'budget_moves'] loop
     -- Índice para la sincronización incremental.
     execute format('create index if not exists %I on public.%I (user_id, updated_at)', t || '_sync_idx', t);
     execute format('drop trigger if exists set_updated_at on public.%I', t);

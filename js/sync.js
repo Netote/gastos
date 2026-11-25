@@ -108,24 +108,43 @@ const COLS = {
   transactions:['id', 'type', 'category', 'amount', 'date', 'description', 'recurring_id', 'created', 'source', 'merchant', 'card', 'review', 'deleted'],
   budgets:['id', 'amount', 'deleted'],
   goals:['id', 'name', 'target', 'saved', 'deadline', 'color', 'deleted'],
-  recurring:['id', 'name', 'type', 'category', 'amount', 'day', 'start_month', 'occurrences', 'active', 'deleted'],
+  recurring:['id', 'name', 'type', 'category', 'amount', 'day', 'start_month', 'occurrences', 'active', 'rate', 'deleted'],
   settings:['id', 'currency', 'opening_balance', 'opening_date', 'deleted'],
-  merchant_rules:['id', 'name', 'category', 'deleted']
+  merchant_rules:['id', 'name', 'category', 'deleted'],
+  categories:['id', 'name', 'color', 'icon', 'kind', 'target', 'due', 'start_month', 'deleted'],
+  budget_moves:['id', 'month', 'from_cat', 'to_cat', 'amount', 'deleted']
 };
+/*
+ * Tablas y columnas de la v2.7. Si la base de datos todavía no se actualizó (falta correr de nuevo supabase/schema.sql),
+ * no se rompe la sincronización del resto: esos datos se quedan en el dispositivo, pendientes, y Ajustes lo avisa.
+ */
+const NEW_TABLES = new Set(['categories', 'budget_moves']);
+const missing = new Set();   // tablas que el servidor aún no tiene
+let noRate = false;          // la columna recurring.rate aún no existe
+export const schemaOutdated = () => missing.size > 0 || noRate;
+const isMissingTable = e => !!e && (e.code === 'PGRST205' || e.code === '42P01' || /could not find the table|does not exist/i.test(e.message || ''));
+const isMissingRate = e => !!e && (e.code === 'PGRST204' || e.code === '42703') && /rate/.test(e.message || '');
+
 const toRow = (table, rec) => {
   const row = {user_id:user.id};
   for (const c of COLS[table]) row[c] = rec[c] === undefined ? null : rec[c];
   if (table === 'transactions') row.review = rec.review === true; // la columna no admite null
   if (table === 'settings') row.opening_balance = Number.isInteger(rec.opening_balance) ? rec.opening_balance : 0; // ídem
+  if (table === 'recurring' && noRate) delete row.rate;
   return row;
 };
 async function push(){
   for (const table of store.TABLES){
+    if (missing.has(table)) continue;
     const entries = store.dirtyEntries(table);
     for (let i = 0; i < entries.length; i += 500){
       const chunk = entries.slice(i, i + 500);
-      const rows = chunk.map(([id]) => toRow(table, store.raw(table, id)));
-      const {error} = await client.from(table).upsert(rows, {onConflict:'user_id,id'});
+      let {error} = await client.from(table).upsert(chunk.map(([id]) => toRow(table, store.raw(table, id))), {onConflict:'user_id,id'});
+      if (error && table === 'recurring' && !noRate && isMissingRate(error)){
+        noRate = true;
+        ({error} = await client.from(table).upsert(chunk.map(([id]) => toRow(table, store.raw(table, id))), {onConflict:'user_id,id'}));
+      }
+      if (error && NEW_TABLES.has(table) && isMissingTable(error)){ missing.add(table); break; }
       if (error) throw error;
       chunk.forEach(([id, ver]) => store.markClean(table, id, ver));
     }
@@ -133,6 +152,7 @@ async function push(){
 }
 async function pull(){
   for (const table of store.TABLES){
+    if (missing.has(table)) continue;
     const cur = store.getCursor(table);
     // Margen de 5 s para no perder filas confirmadas casi al mismo tiempo; aplicar dos veces es inofensivo.
     // Postgres devuelve microsegundos; se recortan a milisegundos para que Safari pueda leer la fecha.
@@ -140,6 +160,7 @@ async function pull(){
     let from = 0, max = cur;
     for (;;){
       const {data, error} = await client.from(table).select('*').gte('updated_at', since).order('updated_at').order('id').range(from, from + PAGE - 1);
+      if (error && NEW_TABLES.has(table) && isMissingTable(error)){ missing.add(table); break; }
       if (error) throw error;
       store.applyRemote(table, data);
       data.forEach(r => { if (!max || r.updated_at > max) max = r.updated_at; });

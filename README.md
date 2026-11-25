@@ -23,6 +23,11 @@ La app tiene cuatro pestañas: **Inicio**, **Movimientos**, **Planear** (calenda
 - **Gráficas** (también en el análisis): ingresos contra gastos de los últimos 6 meses y flujo acumulado del mes.
 - **Movimientos:** búsqueda, filtro rápido por gastos o ingresos, más filtros (categoría, orden, todos los meses), agrupación por día, edición y eliminación con opción de deshacer.
 - **Límites de gasto (presupuestos):** límite mensual por categoría; solo se muestran las categorías que ya tienen uno.
+- **Apartados propios:** crea tus categorías («Café», «Mascota», «Predial») con ícono y color. Pueden ser un **límite del mes** (se reinicia cada mes) o un **ahorro que acumula** para un pago grande: le dices cuánto cuesta y cuándo lo pagas, te dice cuánto apartar al mes y lo que no gastas se va juntando.
+- **Cubrir un sobregasto:** si te pasas en un límite, pasas lo que te sobra de otro. Solo cambia los límites de ese mes.
+- **Fondo «nivel de dinero»:** el fondo es un líquido cuyo nivel es lo que te queda del mes (lo que entró más los ingresos fijos que faltan, menos lo gastado; sin ingresos usa tus límites) y cambia de color si vas justo o se ve un faltante. Se puede apagar en «Datos y ajustes».
+- **Gastos hormiga:** en el Inicio, las compras chicas que se repiten en los últimos 30 días (hasta $200, o 15 en dólares o euros) y cuánto serían al año.
+- **Salir de deudas** (en Planear): tus compras a meses y créditos (fijos con número de pagos y su tasa de interés anual) y la comparación entre **avalancha** (primero la de mayor interés) y **bola de nieve** (primero la más chica) con lo que puedes pagar de más al mes: cuándo terminas y cuánto pagas de intereses.
 - **Metas de ahorro:** avance y monto sugerido por mes según la fecha límite.
 - **Fijos:** renta, suscripciones, quincena y meses sin intereses. Se registran solos el día que toca y se detienen al llegar al número de pagos.
 - **Registro automático (iPhone):** cada compra con tarjeta se registra sola desde el aviso de tu banco; los pagos con Apple Pay sirven de respaldo. Ver [Registro automático](#registro-automático-de-gastos-iphone).
@@ -69,6 +74,10 @@ supabase/cron.sql     Tarea programada del aviso semanal (plantilla: lleva datos
 supabase/functions/   Función `weekly-push`: envía el aviso de los lunes
 tests/                Pruebas (npm test)
 ```
+
+## Actualizar a la versión 2.7
+
+Los apartados, el dinero movido entre límites y las tasas de las deudas se guardan en tablas y columnas nuevas. Ejecuta de nuevo `supabase/schema.sql` en el SQL Editor de Supabase: es idempotente y no borra datos. Mientras no lo hagas, esos datos se quedan en el dispositivo y «Datos y ajustes» te lo recuerda; todo lo demás sigue sincronizando.
 
 ## Puesta en marcha
 
@@ -306,6 +315,6 @@ Existe una versión empaquetada con Capacitor en la rama [`ios-build`](../../tre
 ## Mantenimiento
 
 - **Publicar cambios:** sube la versión en `VERSION` dentro de `sw.js` (y en `package.json`) para que los celulares descarguen lo nuevo. Abre la app desde el icono, ciérrala por completo y vuelve a abrirla; a veces hace falta abrirla dos veces.
-- **Pruebas:** `npm test` (utilidades). Las funciones SQL de registro automático se pueden probar contra un Postgres local ejecutando `supabase/schema.sql`.
+- **Pruebas:** `npm test` (utilidades, límites y apartados, gastos hormiga y plan de deudas). Las funciones SQL de registro automático se pueden probar contra un Postgres local ejecutando `supabase/schema.sql`.
 - **Plan gratuito de Supabase:** el proyecto se pausa tras 7 días sin uso. Se reactiva desde el panel y **no se pierden datos**. Igual conviene exportar un respaldo JSON de vez en cuando.
 - **Dominio propio de Supabase:** si lo usas, agrégalo a `connect-src` en la etiqueta CSP de `index.html`.

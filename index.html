@@ -26,7 +26,7 @@
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
-<div class="bg" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="bg" aria-hidden="true"><div class="liquid" id="liquid" data-state="good"><div class="lq lq-good"><svg class="wave" viewBox="0 0 2880 80" preserveAspectRatio="none" focusable="false"><path d="M0 40 Q 360 4 720 40 T 1440 40 T 2160 40 T 2880 40 V80 H0 Z"/></svg><div class="lq-body"></div></div><div class="lq lq-warn"><svg class="wave" viewBox="0 0 2880 80" preserveAspectRatio="none" focusable="false"><path d="M0 40 Q 360 4 720 40 T 1440 40 T 2160 40 T 2880 40 V80 H0 Z"/></svg><div class="lq-body"></div></div><div class="lq lq-bad"><svg class="wave" viewBox="0 0 2880 80" preserveAspectRatio="none" focusable="false"><path d="M0 40 Q 360 4 720 40 T 1440 40 T 2160 40 T 2880 40 V80 H0 Z"/></svg><div class="lq-body"></div></div></div></div>
 <noscript><p class="noscript">Esta aplicación necesita JavaScript para funcionar.</p></noscript>
 <a class="skip" href="#main">Saltar al contenido</a>
 
@@ -100,6 +100,7 @@
         <button type="button" id="balBtn" class="bal-btn" aria-describedby="balEditHint"><span id="balValue" class="bal-value"></span><span class="bal-edit" data-ico="pencil:16"></span></button>
         <span id="balEditHint" class="sr-only">Tocar para ajustar el saldo</span>
         <p id="balStatus" class="bal-status"></p>
+        <p id="levelHint" class="bal-hint" hidden><span data-ico="droplet:14"></span><span>El nivel del fondo es lo que te queda este mes</span></p>
       </div>
       <div class="bal-acts">
         <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>¿Me alcanza?</span></button>
@@ -123,11 +124,12 @@
         <div class="card-head"><div><h2 id="catsTitle">En qué se va tu dinero</h2><p class="sub" id="catsSub"></p></div></div>
         <ul id="topCats" class="top-cats"></ul>
       </section>
-      <section id="weekCard" class="card week c-5" aria-labelledby="weekTitle" hidden></section>
+      <section id="antCard" class="card ant c-5" aria-labelledby="antTitle" hidden></section>
       <section class="card c-7 recent" aria-labelledby="recentTitle">
         <div class="card-head"><h2 id="recentTitle">Lo último</h2><a href="#movimientos" class="btn sm">Ver todo</a></div>
         <ul id="recentList" class="tx-list"></ul>
       </section>
+      <section id="weekCard" class="card week c-12" aria-labelledby="weekTitle" hidden></section>
     </div>
     <details id="analysis" class="card analysis">
       <summary><span data-ico="gauge:18"></span><span>Ver análisis del mes</span><span class="chev" data-ico="right:18"></span></summary>
@@ -189,7 +191,7 @@
   <section class="view" id="v-presupuestos" data-view="presupuestos" aria-labelledby="h-bud" hidden>
     <nav class="subnav" aria-label="Metas"><a href="#metas" data-sub="metas">Ahorro</a><a href="#presupuestos" data-sub="presupuestos">Límites de gasto</a></nav>
     <div class="card">
-      <div class="card-head"><div><h1 class="h2" id="h-bud">Límites de gasto</h1><p class="sub" id="budSub">Cuánto quieres gastar al mes en cada cosa</p></div></div>
+      <div class="card-head"><div><h1 class="h2" id="h-bud">Límites de gasto</h1><p class="sub" id="budSub">Cuánto quieres gastar al mes en cada cosa</p></div><button type="button" id="newCat" class="btn primary"><span data-ico="plus:18"></span><span>Nuevo apartado</span></button></div>
       <div id="budTotal" class="bud-total" hidden></div>
       <ul id="budList" class="bud-list"></ul>
       <details id="budMore" class="bud-more">
@@ -202,7 +204,7 @@
   <!-- Planear: calendario predictivo -->
   <section class="view" id="v-planear" data-view="planear" aria-labelledby="h-plan" hidden>
     <h1 class="sr-only" id="h-plan">Planear</h1>
-    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Pagos fijos</a></nav>
+    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Fijos</a><a href="#deudas" data-sub="deudas">Deudas</a></nav>
     <div id="planKpis" class="card plan-sum"></div>
     <ul id="planAlerts" class="alerts" aria-label="Avisos de la proyección"></ul>
     <div class="grid">
@@ -223,13 +225,40 @@
 
   <!-- Planear: pagos fijos -->
   <section class="view" id="v-fijos" data-view="fijos" aria-labelledby="h-rec" hidden>
-    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Pagos fijos</a></nav>
+    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Fijos</a><a href="#deudas" data-sub="deudas">Deudas</a></nav>
     <div class="view-head">
       <div><h1 class="h2" id="h-rec">Pagos fijos</h1><p class="sub">Renta, suscripciones, tu quincena o compras a meses: se anotan solos el día que toca</p></div>
       <button type="button" id="newRec" class="btn primary"><span data-ico="plus:18"></span><span>Nuevo fijo</span></button>
     </div>
     <div id="recSummary" class="card rec-sum" hidden></div>
     <div id="recList" class="card rec-card"></div>
+  </section>
+
+  <!-- Planear: plan para salir de deudas -->
+  <section class="view" id="v-deudas" data-view="deudas" aria-labelledby="h-debt" hidden>
+    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Fijos</a><a href="#deudas" data-sub="deudas">Deudas</a></nav>
+    <div class="view-head">
+      <div><h1 class="h2" id="h-debt">Salir de deudas</h1><p class="sub">Tus compras a meses y créditos, y la forma más rápida de liquidarlos</p></div>
+      <button type="button" id="newDebt" class="btn primary"><span data-ico="plus:18"></span><span>Agregar deuda</span></button>
+    </div>
+    <div id="debtEmpty" class="card empty" hidden></div>
+    <div id="debtMain" hidden>
+      <section class="card debt-sum" id="debtSum" aria-live="polite"></section>
+      <section class="card debt-extra" aria-labelledby="debtExtraLbl">
+        <label for="debtExtra" id="debtExtraLbl" class="debt-q">¿Cuánto más puedes pagar al mes?</label>
+        <div class="extra-row">
+          <div class="prefix"><span class="cur-sym">$</span><input id="debtExtra" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+          <div class="extra-chips" id="debtChips"></div>
+        </div>
+        <p class="hint">Además de tus mensualidades. Cuando liquidas una deuda, su mensualidad también se suma al pago extra.</p>
+      </section>
+      <p id="debtWhy" class="debt-why"></p>
+      <div id="debtCmp" class="debt-cmp"></div>
+      <section class="card" aria-labelledby="debtListTitle">
+        <div class="card-head"><h2 id="debtListTitle">Tus deudas</h2></div>
+        <div id="debtList"></div>
+      </section>
+    </div>
   </section>
 
   <p class="foot" id="foot"></p>
@@ -359,11 +388,55 @@
         <div class="field"><label for="rStart">Desde el mes</label><input id="rStart" type="month"><p class="err" id="rStartErr" hidden></p></div>
       </div>
       <div class="field"><label for="rOcc">Número de pagos <span class="opt">(opcional)</span></label><input id="rOcc" type="number" inputmode="numeric" min="1" max="600" placeholder="Sin fin"><p class="hint">Para meses sin intereses o créditos: pon el total de pagos y se detiene solo.</p><p class="err" id="rOccErr" hidden></p></div>
+      <div class="field" id="rRateField" hidden><label for="rRate">Interés anual <span class="opt">(opcional)</span></label><div class="suffix"><input id="rRate" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span>%</span></div><p class="hint">Déjalo en 0 si es a meses sin intereses. Sirve para el plan de deudas.</p><p class="err" id="rRateErr" hidden></p></div>
     </div>
     <div class="dlg-foot">
       <button type="button" id="rDelete" class="btn danger" hidden><span data-ico="trash:18"></span><span>Eliminar</span></button>
       <button type="submit" class="btn primary grow" id="rSubmit">Guardar</button>
     </div>
+  </form>
+</dialog>
+
+<!-- Apartado propio -->
+<dialog id="catDlg" class="dlg sheet" aria-labelledby="catTitle">
+  <form id="catForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="catTitle">Nuevo apartado</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <div class="field"><label for="kName">Nombre</label><input id="kName" type="text" maxlength="40" autocomplete="off" placeholder="Ej. Café, Mascota, Predial"><p class="err" id="kNameErr" hidden></p></div>
+      <div class="seg" id="kSeg" role="radiogroup" aria-label="Tipo de apartado">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="limite">Límite del mes</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="acumula">Ahorro que acumula</button>
+      </div>
+      <p class="hint kind-hint" id="kKindHint"></p>
+      <div id="kLimitBox" class="field"><label for="kAmount">¿Cuánto quieres gastar al mes?</label><div class="prefix big"><span class="cur-sym">$</span><input id="kAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div><p class="err" id="kAmountErr" hidden></p></div>
+      <div id="kSaveBox" hidden>
+        <div class="row2">
+          <div class="field"><label for="kTarget">¿Cuánto cuesta?</label><div class="prefix"><span class="cur-sym">$</span><input id="kTarget" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div><p class="err" id="kTargetErr" hidden></p></div>
+          <div class="field"><label for="kDue">¿Cuándo lo pagas?</label><input id="kDue" type="date"><p class="err" id="kDueErr" hidden></p></div>
+        </div>
+        <p class="ok-box" id="kPlan" hidden></p>
+      </div>
+      <fieldset class="field"><legend>Ícono</legend><div id="kIcons" class="icon-grid"></div></fieldset>
+      <fieldset class="field"><legend>Color</legend><div id="kColors" class="swatches"></div></fieldset>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="kDelete" class="btn danger" hidden><span data-ico="trash:18"></span><span>Eliminar</span></button>
+      <button type="submit" class="btn primary grow" id="kSubmit">Crear apartado</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Cubrir un sobregasto con lo que sobra en otro límite -->
+<dialog id="covDlg" class="dlg sheet" aria-labelledby="covTitle">
+  <form id="covForm" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="covTitle">Cubrir</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar" data-ico="x"></button></div>
+    <div class="dlg-body">
+      <p id="covText" class="cov-text"></p>
+      <fieldset class="field"><legend>¿De dónde lo tomas?</legend><ul id="covList" class="cov-list"></ul><p class="err" id="covListErr" hidden></p></fieldset>
+      <div class="field"><label for="covAmount">Monto</label><div class="prefix"><span class="cur-sym">$</span><input id="covAmount" type="text" inputmode="decimal" autocomplete="off"></div><p class="err" id="covAmountErr" hidden></p></div>
+      <p class="hint">Solo cambia los límites de este mes. Tus movimientos no se tocan.</p>
+    </div>
+    <div class="dlg-foot"><button type="submit" class="btn primary grow" id="covSubmit">Mover dinero</button></div>
   </form>
 </dialog>
 
@@ -396,6 +469,7 @@
       <h3>Cuenta y sincronización</h3>
       <p id="accountInfo" class="muted"></p>
       <div class="row" id="accountBtns"></div>
+      <p id="dbUpdate" class="confirm" hidden>Para guardar en la nube tus apartados, los movimientos entre límites y las tasas de tus deudas, ejecuta de nuevo <code>supabase/schema.sql</code> en Supabase. Mientras tanto se guardan en este dispositivo.</p>
     </section>
     <section id="walletSec" hidden>
       <h3>Registro automático de gastos</h3>
@@ -449,6 +523,7 @@
         <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="light">Claro</button>
         <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="dark">Oscuro</button>
       </div>
+      <label class="chk"><input type="checkbox" id="bgLevel" checked> Fondo «nivel de dinero»: baja conforme gastas y cambia de color si vas justo</label>
     </section>
     <section>
       <h3>Moneda</h3>

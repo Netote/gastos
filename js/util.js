@@ -68,7 +68,29 @@ export const CATS = [
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const EXP = CATS.filter(c => c.type === 'expense');
 export const INC = CATS.filter(c => c.type === 'income');
-export const catOf = id => CAT[id] || {id, name:id, type:'expense', color:'#94A3B8', icon:'more', group:'want'};
+export const catOf = id => CAT[id] || {id, name:'Sin categoría', type:'expense', color:'#94A3B8', icon:'more', group:'want'};
+
+/* ---------- Apartados propios ---------- */
+const BASE = CATS.slice(), BASE_IDS = new Set(BASE.map(c => c.id));
+/** Iconos que se pueden elegir para un apartado propio (todos existen en icons.js). */
+export const CUSTOM_ICONS = ['coffee', 'utensils', 'bag', 'shirt', 'gift', 'paw', 'plane', 'car', 'home', 'landmark', 'zap', 'phone', 'heart', 'cap', 'book', 'game', 'music', 'wrench', 'card', 'shield', 'repeat', 'more'];
+/**
+ * Agrega los apartados propios a CATS, CAT y EXP. Se modifican los MISMOS objetos para que todos los módulos que los
+ * importaron vean los cambios. Los borrados siguen en CAT (sus movimientos conservan nombre y color) pero ya no se
+ * ofrecen en EXP. Quedan antes de «Otros gastos».
+ */
+export function setCustomCats(rows){
+  const mk = c => ({id:c.id, name:c.name + (c.deleted ? ' (eliminado)' : ''), type:'expense', color:/^#[0-9A-Fa-f]{6}$/.test(c.color) ? c.color : '#94A3B8',
+    icon:CUSTOM_ICONS.includes(c.icon) ? c.icon : 'more', group:'want', custom:true, kind:c.kind === 'acumula' ? 'acumula' : 'limite',
+    target:Number.isInteger(c.target) ? c.target : null, due:c.due || null, start_month:c.start_month || null, deleted:!!c.deleted});
+  const custom = (rows || []).filter(c => c && c.id && !BASE_IDS.has(c.id) && typeof c.name === 'string').map(mk).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const baseExp = BASE.filter(c => c.type === 'expense'), other = baseExp.pop(); // «Otros gastos» va al final
+  const exp = baseExp.concat(custom.filter(c => !c.deleted), [other]);
+  EXP.splice(0, EXP.length, ...exp);
+  CATS.splice(0, CATS.length, ...exp, ...BASE.filter(c => c.type === 'income'));
+  Object.keys(CAT).forEach(k => { delete CAT[k]; });
+  BASE.concat(custom).forEach(c => { CAT[c.id] = c; });
+}
 
 /* ---------- Cálculos ---------- */
 export function sums(list){ let inc = 0, exp = 0; for (const t of list){ if (t.type === 'income') inc += t.amount; else exp += t.amount; } return {inc, exp, net:inc - exp}; }

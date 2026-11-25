@@ -57,6 +57,13 @@
   --field-bg:rgba(8,13,28,.5); --track:rgba(255,255,255,.12); --scrim:rgba(0,0,0,.55); --nav-bg:rgba(8,12,26,.68); --hero-shade:rgba(4,8,20,.34); --muted-strong:#D5DEEE;
 }
 
+/* Líquido del fondo: arriba y abajo de cada estado (bien, justo, faltante). */
+:root{ --lq-good-1:rgba(59,130,246,.40); --lq-good-2:rgba(16,185,129,.42); --lq-warn-1:rgba(245,158,11,.42); --lq-warn-2:rgba(234,88,12,.40); --lq-bad-1:rgba(239,68,68,.40); --lq-bad-2:rgba(190,18,60,.46); --lq-edge:rgba(255,255,255,.75); }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --lq-good-1:rgba(37,99,235,.55); --lq-good-2:rgba(13,148,136,.50); --lq-warn-1:rgba(217,119,6,.55); --lq-warn-2:rgba(194,65,12,.52); --lq-bad-1:rgba(220,38,38,.55); --lq-bad-2:rgba(159,18,57,.58); --lq-edge:rgba(255,255,255,.22); }
+}
+:root[data-theme="dark"]{ --lq-good-1:rgba(37,99,235,.55); --lq-good-2:rgba(13,148,136,.50); --lq-warn-1:rgba(217,119,6,.55); --lq-warn-2:rgba(194,65,12,.52); --lq-bad-1:rgba(220,38,38,.55); --lq-bad-2:rgba(159,18,57,.58); --lq-edge:rgba(255,255,255,.22); }
+
 /* ---------- Base ---------- */
 *,*::before,*::after{ box-sizing:border-box; }
 html{ background:var(--bg); -webkit-text-size-adjust:100%; scroll-padding-top:140px; }
@@ -82,23 +89,24 @@ a{ color:inherit; }
 .noscript{ padding:16px; }
 [hidden]{ display:none !important; }
 
-/* Fondo: manchas de color. Quietas por defecto: si se movieran, el desenfoque de CADA tarjeta se recalcularía en cada cuadro
-   (consumo continuo de GPU y batería). La deriva lenta solo se activa en pantallas grandes con ratón. */
+/*
+ * Fondo «nivel de dinero»: un líquido cuyo nivel es lo que te queda del mes y cuyo color dice cómo vas.
+ * Solo se mueve cuando cambia el valor (transform, 500 ms ease-in-out: es movimiento en pantalla); el color cambia
+ * cruzando tres capas con opacity. Quieto el resto del tiempo: si se moviera, el desenfoque de CADA tarjeta se
+ * recalcularía en cada cuadro. La ola se desliza solo en pantallas grandes con ratón.
+ */
 .bg{ position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; background:var(--bg); }
-.bg i{ position:absolute; border-radius:50%; will-change:transform; }
-.bg i:nth-child(1){ width:92vmax; height:92vmax; left:-38vmax; top:-26vmax; background:radial-gradient(circle, var(--orb1), transparent 68%); }
-.bg i:nth-child(2){ width:84vmax; height:84vmax; right:-40vmax; top:14vh; background:radial-gradient(circle, var(--orb2), transparent 66%); }
-.bg i:nth-child(3){ width:84vmax; height:84vmax; left:-24vmax; bottom:-38vmax; background:radial-gradient(circle, var(--orb3), transparent 66%); }
-.bg i:nth-child(4){ width:62vmax; height:62vmax; right:-18vmax; bottom:-24vmax; background:radial-gradient(circle, var(--orb4), transparent 66%); }
-@media (min-width: 900px) and (hover: hover){
-  .bg i:nth-child(1){ animation:drift1 42s ease-in-out infinite alternate; }
-  .bg i:nth-child(2){ animation:drift2 50s ease-in-out infinite alternate; }
-  .bg i:nth-child(3){ animation:drift3 46s ease-in-out infinite alternate; }
-  .bg i:nth-child(4){ animation:drift1 58s ease-in-out infinite alternate-reverse; }
-}
-@keyframes drift1{ to{ transform:translate3d(12vmax, 9vmax, 0) scale(1.12); } }
-@keyframes drift2{ to{ transform:translate3d(-14vmax, 12vmax, 0) scale(1.08); } }
-@keyframes drift3{ to{ transform:translate3d(10vmax, -12vmax, 0) scale(1.15); } }
+.liquid{ position:absolute; inset:0; transform:translateY(50%); will-change:transform; }
+.liquid.ready{ transition:transform 500ms var(--ease-in-out); }
+.lq{ position:absolute; inset:0; opacity:0; transition:opacity 500ms ease; }
+.liquid[data-state="good"] .lq-good,.liquid[data-state="warn"] .lq-warn,.liquid[data-state="bad"] .lq-bad{ opacity:1; }
+.lq-good{ --a:var(--lq-good-1); --b:var(--lq-good-2); } .lq-warn{ --a:var(--lq-warn-1); --b:var(--lq-warn-2); } .lq-bad{ --a:var(--lq-bad-1); --b:var(--lq-bad-2); }
+.wave{ position:absolute; left:0; bottom:calc(100% - 1px); width:200%; height:46px; display:block; filter:drop-shadow(0 -1.5px 0 var(--lq-edge)); }
+.wave path{ fill:var(--a); }
+.lq-body{ position:absolute; inset:0; background:linear-gradient(180deg, var(--a), var(--b) 70%); }
+@media (min-width: 900px) and (hover: hover){ .wave{ animation:wave 18s linear infinite; } }
+@keyframes wave{ to{ transform:translateX(-50%); } }
+html[data-bg="plain"] .liquid{ display:none; }
 
 /* Borde de luz del vidrio: un degradado de 1px que brilla arriba a la izquierda. */
 .card::before,dialog.dlg::before,.period::before,.toast::before{
@@ -146,7 +154,7 @@ a{ color:inherit; }
 .period{ position:relative; display:flex; align-items:center; gap:2px; padding:3px; border-radius:18px; background:var(--glass); box-shadow:var(--shadow-sm); backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%); }
 .period-label{ min-width:150px; min-height:44px; border:0; background:transparent; text-align:center; font-weight:600; border-radius:var(--r-sm); }
 .top-actions{ display:flex; align-items:center; gap:var(--s-2); }
-#app[data-route="metas"] .period{ visibility:hidden; }
+#app[data-route="metas"] .period,#app[data-route="deudas"] .period{ visibility:hidden; }
 .top-actions > .icon-btn{ background:var(--glass); border-color:var(--border); box-shadow:var(--shadow-sm); }
 
 .tabs-in{ position:relative; display:flex; gap:var(--s-1); padding-bottom:var(--s-2); }
@@ -438,7 +446,9 @@ dialog.dlg::backdrop{ background:var(--scrim); backdrop-filter:blur(6px) saturat
   .kpi-sub{ font-size:.75rem; }
   .cat-grid{ grid-template-columns:repeat(3, 1fr); }
   .row2{ grid-template-columns:1fr; gap:0; }
-  .bud-input{ width:104px; }
+  .bud-input{ width:92px; padding:0 10px; }
+  .bud-edit{ width:36px; height:36px; }
+  .bud-top{ gap:8px; }
   .rec{ grid-template-columns:44px 1fr auto; }
   .rec-acts{ grid-column:2 / -1; justify-content:flex-end; margin-top:-6px; }
 }
@@ -635,6 +645,75 @@ dialog.dlg > form.chat-form{ flex:none; flex-direction:row; gap:var(--s-2); padd
   .duo-ico{ display:none; }
 }
 
+/* ---------- v2.7: aviso del fondo ---------- */
+.bal-hint{ display:flex; align-items:center; gap:6px; margin-top:8px; font-size:.8125rem; color:var(--muted-strong); }
+.bal-hint .ico{ color:var(--primary); }
+
+/* ---------- v2.7: apartados ---------- */
+.bud-sub{ font-size:.75rem; color:var(--muted); margin-top:2px; }
+.bud-name .badge{ margin-left:4px; vertical-align:1px; }
+.bud-edit{ width:40px; height:40px; flex:none; color:var(--muted); }
+.bud-cover{ justify-self:start; margin-top:2px; }
+.bar.save > span{ background:linear-gradient(180deg, color-mix(in srgb, var(--c) 70%, #fff), var(--c)); }
+.icon-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(46px, 1fr)); gap:6px; }
+.icon-opt{ position:relative; }
+.icon-opt input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+.icon-opt span{ display:grid; place-items:center; height:46px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--field-bg); color:var(--muted-strong); transition:background-color var(--t-press) ease, border-color var(--t-press) ease, transform var(--t-press) var(--ease-out); }
+.icon-opt:active span{ transform:scale(.95); }
+.icon-opt input:checked + span{ border-color:var(--primary); background:color-mix(in srgb, var(--primary) 16%, var(--field-bg)); color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary); }
+.icon-opt input:focus-visible + span{ outline:2px solid var(--ring); outline-offset:2px; }
+.kind-hint{ margin:-6px 0 var(--s-3); }
+.ok-box{ display:flex; align-items:flex-start; gap:8px; margin:0 0 var(--s-3); padding:10px 12px; border-radius:var(--r-md); background:color-mix(in srgb, var(--income) 12%, transparent); font-size:.875rem; }
+.ok-box .ico{ color:var(--income); margin-top:2px; }
+.suffix{ position:relative; }
+.suffix input{ padding-right:40px; }
+.suffix span{ position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; font-weight:500; }
+.field .suffix input{ width:100%; min-height:44px; padding:0 40px 0 14px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--field-bg); box-shadow:0 1px 3px rgba(0,0,0,.10) inset; }
+.field .suffix input:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent); }
+/* Cubrir un sobregasto */
+.cov-text{ margin-bottom:var(--s-3); }
+.cov-list{ list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.cov-opt{ position:relative; display:grid; grid-template-columns:42px 1fr auto; align-items:center; gap:var(--s-3); padding:8px 12px 8px 8px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--field-bg); transition:border-color var(--t-press) ease, background-color var(--t-press) ease; }
+.cov-opt input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+.cov-opt:has(input:checked){ border-color:var(--c); background:color-mix(in srgb, var(--c) 14%, var(--field-bg)); box-shadow:inset 0 0 0 1px var(--c); }
+.cov-opt:has(input:focus-visible){ outline:2px solid var(--ring); outline-offset:2px; }
+.cov-name{ font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cov-left{ font-size:.8125rem; color:var(--muted); white-space:nowrap; }
+
+/* ---------- v2.7: gastos hormiga ---------- */
+.ant .card-head{ flex-wrap:nowrap; }
+.ant-ico{ flex:none; display:grid; place-items:center; width:38px; height:38px; border-radius:14px; background:color-mix(in srgb, var(--warn) 16%, transparent); color:var(--warn); }
+.ant-list{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+.ant-row{ width:100%; display:grid; grid-template-columns:42px 1fr auto; align-items:center; gap:var(--s-3); padding:8px; border:0; border-radius:var(--r-md); background:transparent; text-align:left; transition:background-color var(--t-press) ease, transform var(--t-press) var(--ease-out); }
+.ant-row:active{ transform:scale(.98); background:var(--surface-3); }
+.ant-main{ display:block; min-width:0; }
+.ant-name{ display:block; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ant-meta{ display:block; font-size:.8125rem; color:var(--muted); }
+.ant-amt{ font-weight:600; white-space:nowrap; }
+.ant-year{ margin-top:var(--s-3); padding:10px 12px; border-radius:var(--r-md); background:color-mix(in srgb, var(--warn) 12%, transparent); font-size:.875rem; }
+
+/* ---------- v2.7: deudas ---------- */
+.debt-sum{ margin-bottom:var(--s-4); }
+.debt-min{ margin-top:var(--s-3); font-size:.9375rem; color:var(--muted-strong); }
+.debt-extra{ margin-bottom:var(--s-3); }
+.debt-q{ display:block; font-weight:600; margin-bottom:8px; }
+.extra-row{ display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); }
+.extra-row .prefix{ flex:1 1 180px; }
+.extra-row .prefix input{ width:100%; min-height:48px; padding:0 14px 0 42px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--field-bg); box-shadow:0 1px 3px rgba(0,0,0,.10) inset; font-weight:600; font-size:1.125rem; }
+.extra-row .prefix input:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent); }
+.extra-chips{ display:flex; gap:var(--s-2); flex-wrap:wrap; }
+.debt-why{ display:flex; align-items:flex-start; gap:8px; margin:0 0 var(--s-3); padding:0 4px; font-size:.9375rem; color:var(--muted-strong); }
+.debt-why:empty{ display:none; }
+.debt-why .ico{ color:var(--income); margin-top:3px; }
+.debt-cmp{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:var(--s-4); margin-bottom:var(--s-4); }
+.strat{ display:grid; gap:6px; align-content:start; }
+.strat.best{ box-shadow:var(--shadow), 0 0 0 2px color-mix(in srgb, var(--income) 65%, transparent); }
+.strat .badge{ justify-self:start; background:color-mix(in srgb, var(--income) 18%, transparent); color:var(--income); }
+.strat h3{ font-size:1.0625rem; }
+.strat-end{ margin-top:6px; font-size:1.0625rem; }
+.strat-meta{ font-size:.875rem; color:var(--muted); }
+.strat-order{ margin-top:var(--s-2); padding-top:var(--s-2); border-top:1px solid var(--border); color:var(--muted); }
+
 /* ---------- Hover: solo con ratón ---------- */
 @media (hover: hover) and (pointer: fine){
   .btn:hover{ background:var(--glass-strong); }
@@ -643,7 +722,8 @@ dialog.dlg > form.chat-form{ flex:none; flex-direction:row; gap:var(--s-2); padd
   .period-label:hover{ background:var(--glass-2); }
   .tabs a:hover{ color:var(--text); }
   .fab:hover{ filter:brightness(1.06); }
-  .tx:hover,.cat-row:hover,.bal-btn:hover{ background:var(--glass-2); }
+  .tx:hover,.cat-row:hover,.bal-btn:hover,.ant-row:hover{ background:var(--glass-2); }
+  .icon-opt:hover span,.cov-opt:hover{ border-color:color-mix(in srgb, var(--primary) 45%, var(--border)); }
   .tx:disabled:hover{ background:transparent; }
   .cal-day:hover{ background:var(--glass-strong); }
   .chip-btn:hover{ background:var(--glass-strong); }
@@ -654,7 +734,7 @@ dialog.dlg > form.chat-form{ flex:none; flex-direction:row; gap:var(--s-2); padd
 /* ---------- Accesibilidad y respaldo ---------- */
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{ transition-duration:.01ms !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; }
-  .bg i{ animation:none; }
+  .wave{ animation:none; }
 }
 /* «Reducir transparencia» o un navegador sin desenfoque: superficies sólidas y legibles. */
 @media (prefers-reduced-transparency: reduce){

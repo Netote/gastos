@@ -6,7 +6,7 @@
  */
 import {uid} from './util.js';
 
-export const TABLES = ['transactions', 'budgets', 'goals', 'recurring', 'settings', 'merchant_rules'];
+export const TABLES = ['transactions', 'budgets', 'goals', 'recurring', 'settings', 'merchant_rules', 'categories', 'budget_moves'];
 const KEY = 'gastos:v2';
 const LEGACY_KEY = 'gastos-app:v1';
 
@@ -53,6 +53,8 @@ function emit(origin){ bump(); listeners.forEach(fn => fn(origin)); }
 export const get = (table, id) => { const r = db.data[table][id]; return r && !r.deleted ? r : null; };
 export const has = (table, id) => !!db.data[table][id]; // incluye borrados
 export const all = table => Object.values(db.data[table]).filter(r => !r.deleted);
+/** Incluye los borrados (p. ej. apartados eliminados, para seguir mostrando el nombre en sus movimientos). */
+export const allRaw = table => Object.values(db.data[table]);
 export const settings = () => get('settings', 'main') || {id:'main', currency:'MXN'};
 
 /** Movimientos agrupados por mes ('YYYY-MM'); se recalcula solo cuando cambian los datos. */

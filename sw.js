@@ -5,11 +5,11 @@
  * También muestra el aviso semanal (push) y abre el reporte al tocarlo.
  * Cambia VERSION al publicar cambios para limpiar cachés viejas.
  */
-const VERSION = 'gastos-v2.6.0';
+const VERSION = 'gastos-v2.7.0';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/boot.js', 'js/app.js', 'js/util.js', 'js/store.js', 'js/sync.js', 'js/config.js', 'js/charts.js', 'js/icons.js', 'js/fx.js',
-  'js/forecast.js', 'js/nlu.js', 'js/report.js', 'js/plan.js', 'js/push.js',
+  'js/forecast.js', 'js/nlu.js', 'js/report.js', 'js/plan.js', 'js/push.js', 'js/finance.js',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'vendor/motion.min.js',
   'fonts/ibm-plex-sans-400.woff2', 'fonts/ibm-plex-sans-500.woff2', 'fonts/ibm-plex-sans-600.woff2', 'fonts/ibm-plex-sans-700.woff2',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
