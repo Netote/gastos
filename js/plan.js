@@ -54,22 +54,21 @@ function balanceChart(key, canvas, labels, series){
 let sel = null, ghost = null; // día seleccionado y compra simulada que se muestra como «fantasma»
 
 const alertLi = (cls, icon, html) => '<li class="alert ' + cls + '"><span class="ins-ico ' + cls + '">' + ico(icon, 18) + '</span><p>' + html + '</p></li>';
+/** Devuelve {main, info}: los avisos que importan (se ven) y las notas sobre cómo se calculó (plegadas bajo la gráfica). */
 function alertsHTML(fc, sf, cl, prep, m){
-  const out = [], end = fc.days[fc.days.length - 1].date;
+  const out = [], info = [], end = fc.days[fc.days.length - 1].date;
   if (ghost) out.push('<li class="alert sim"><span class="ins-ico">' + ico('chat', 18) + '</span><p>Mostrando la simulación: <strong>' + esc(ghost.label) + '</strong>. Los días con <em>Simulación</em> no son reales.</p><button type="button" class="btn sm" data-ghost-off>Quitar</button></li>');
   sf.negative.slice(0, 2).forEach(r => out.push(alertLi('bad', 'alert',
-    '<strong>Faltante previsto el ' + dS(r.from) + '.</strong> Tu saldo bajaría a ' + money(r.min) + (r.minDate !== r.from ? ' (el punto más bajo sería el ' + dS(r.minDate) + ')' : '') + ': te faltan <strong>' + money(-r.min) + '</strong> antes de esa fecha.' +
-    (r.causes.length ? ' Pagos de esos días: ' + names(r.causes) + '.' : '') + (r.to < end ? ' Se recupera el ' + dS(F.addDays(r.to, 1)) + '.' : ''))));
+    '<strong>El ' + dS(r.from) + ' te faltaría dinero.</strong> Necesitarías <strong>' + money(-r.min) + '</strong> más' + (r.causes.length ? ' para cubrir ' + names(r.causes) : '') + '.' + (r.to < end ? ' Se recupera el ' + dS(F.addDays(r.to, 1)) + '.' : ''))));
   const low = sf.low.find(r => !sf.negative.some(n => n.from <= r.to && n.to >= F.addDays(r.from, -1))) || (!sf.negative.length && sf.low[0]);
-  if (low) out.push(alertLi('warn', 'gauge', '<strong>Saldo justo del ' + dS(low.from) + ' al ' + dS(low.to) + '.</strong> Quedarías con ' + money(low.min) + ' el ' + dS(low.minDate) + ', menos que una semana de tu gasto habitual (' + money(fc.cushion) + ').'));
-  cl.filter(c => c.share >= .2 || c.items.length >= 3).slice(0, 2).forEach(c => out.push(alertLi(c.share >= .4 ? 'warn' : '', 'calendar',
-    '<strong>' + c.items.length + ' pagos coinciden ' + (c.from === c.to ? 'el ' + dS(c.from) : 'entre el ' + dS(c.from) + ' y el ' + dS(c.to)) + ':</strong> ' + names(c.items, 4) + ', por ' + money(c.total) + ' (' + pct(Math.min(c.share, 9.99)) + ' del saldo previsto).' +
-    (c.nextIncome && !c.incomeInside ? ' Tu siguiente ingreso (' + esc(c.nextIncome.name) + ') llega hasta el ' + dS(c.nextIncome.date) + '.' : ''))));
-  if (!sf.negative.length && !low) out.push(alertLi('good', 'check', 'Sin faltantes previstos. Tu saldo más bajo sería <strong>' + money(fc.min.balance) + '</strong> el ' + dS(fc.min.date) + '.'));
-  if (prep.inferred.length) out.push(alertLi('', 'info', 'Incluye ingresos que detecté en tu historial: ' + prep.inferred.map(s => esc(s.name) + ' (día ' + s.day + ', ' + money(s.amount) + ')').join('; ') + '. <a href="#fijos">Agrégalos como fijos</a> para que sean exactos.'));
-  else if (!m.income) out.push(alertLi('', 'info', 'No encuentro ingresos fijos ni habituales, así que la proyección solo descuenta gastos. <a href="#fijos">Agrega tu quincena o sueldo como fijo</a> para verla completa.'));
-  if (prep.vd.confidence === 'baja' || prep.vd.confidence === 'none') out.push(alertLi('', 'info', prep.vd.confidence === 'none' ? 'Aún no hay movimientos: registra tus gastos unos días para estimar tu gasto diario.' : 'Estimación con pocos datos (' + prep.vd.days + ' días de historial). Mejora conforme registres más movimientos.'));
-  return out.join('');
+  if (low) out.push(alertLi('warn', 'gauge', '<strong>Del ' + dS(low.from) + ' al ' + dS(low.to) + ' quedarías justo.</strong> Te quedarían unos ' + money(low.min) + '.'));
+  cl.filter(c => c.share >= .2 || c.items.length >= 3).slice(0, 1).forEach(c => out.push(alertLi(c.share >= .4 ? 'warn' : '', 'calendar',
+    '<strong>' + c.items.length + ' pagos juntos ' + (c.from === c.to ? 'el ' + dS(c.from) : 'del ' + dS(c.from) + ' al ' + dS(c.to)) + '</strong>: ' + names(c.items, 3) + ', por ' + money(c.total) + '.')));
+  if (prep.inferred.length) info.push('<li>' + 'Incluye ingresos que detecté en tu historial: ' + prep.inferred.map(s => esc(s.name) + ' (día ' + s.day + ', ' + money(s.amount) + ')').join('; ') + '. <a href="#fijos">Agrégalos como fijos</a> para que sean exactos.</li>');
+  else if (!m.income) info.push('<li>No encuentro ingresos fijos ni habituales, así que la proyección solo descuenta gastos. <a href="#fijos">Agrega tu quincena o sueldo como fijo</a> para verla completa.</li>');
+  info.push('<li>Sumo tus ingresos y pagos fijos, lo que ya programaste y tu gasto diario habitual (el promedio de tus últimos 90 días).</li>');
+  if (prep.vd.confidence === 'baja' || prep.vd.confidence === 'none') info.push('<li>' + (prep.vd.confidence === 'none' ? 'Aún no hay movimientos: registra tus gastos unos días para estimar tu gasto diario.' : 'Estimación con pocos datos (' + prep.vd.days + ' días de historial). Mejora conforme registres más movimientos.') + '</li>');
+  return {main:out.slice(0, ghost ? 3 : 2).join(''), info:info.join('')};
 }
 
 export function renderPlan(){
@@ -78,10 +77,13 @@ export function renderPlan(){
   const byDate = new Map(fc.days.map(d => [d.date, d])), sf = F.shortfalls(fc), cl = F.clusters(fc), mo = F.monthly(prep);
   const clash = new Set(); cl.forEach(c => { for (let d = c.from; d <= c.to; d = F.addDays(d, 1)) clash.add(d); });
 
-  const kpi = (label, cents, sub, k) => '<article class="card kpi"><div class="kpi-top"><span>' + label + '</span></div><p class="kpi-val' + (cents < 0 ? ' neg' : '') + '" data-count="' + cents + '" data-count-key="' + k + '">' + money(cents) + '</p><p class="kpi-sub">' + sub + '</p></article>';
-  $('#planKpis').innerHTML = kpi('Saldo hoy', fc.start, 'Antes de los pagos de hoy', 'pl-now') + kpi('En 30 días', fc.days[30].balance, dS(fc.days[30].date), 'pl-30') +
-    kpi('En 60 días', fc.days[60].balance, dS(fc.days[60].date), 'pl-60') + kpi('Punto más bajo', fc.min.balance, 'El ' + dS(fc.min.date), 'pl-min');
-  $('#planAlerts').innerHTML = alertsHTML(fc, sf, cl, prep, mo);
+  const in30 = fc.days[30].balance, ok = !sf.negative.length;
+  $('#planKpis').innerHTML = '<p class="plan-lbl">En 30 días tendrías</p><p class="plan-val' + (in30 < 0 ? ' neg' : '') + '">' + money(in30) + '</p>' +
+    '<p class="plan-sub ' + (ok ? 'good' : 'bad') + '">' + ico(ok ? 'check' : 'alert', 16) + '<span>' + (ok ? 'Tu saldo más bajo sería ' + money(fc.min.balance) + ' el ' + dS(fc.min.date) + '.' : 'Hay días en que te faltaría dinero: revisa los avisos.') + '</span></p>' +
+    '<button type="button" class="btn primary" data-chat>' + ico('chat', 18) + '<span>¿Me alcanza para algo?</span></button>';
+  const al = alertsHTML(fc, sf, cl, prep, mo);
+  $('#planAlerts').innerHTML = al.main;
+  $('#planInfo').innerHTML = al.info; $('#planInfoBox').hidden = !al.info;
 
   // Cuadrícula del mes (lunes a domingo)
   const real = new Map();
@@ -99,12 +101,10 @@ export function renderPlan(){
     if (f && f.events.some(e => e.kind === 'sim')) cls.push('ghost');
     const label = dL(date) + (exp ? ': gastos ' + money(exp) : '') + (inc ? ', ingresos ' + money(inc) : '') + (!past && f ? ', saldo previsto ' + money(f.balance) : '') + (clash.has(date) ? ', coinciden varios pagos' : '');
     html += '<button type="button" class="' + cls.join(' ') + '" data-day="' + date + '" aria-label="' + esc(label) + '" aria-pressed="' + (date === sel) + '"><span class="cal-num">' + d + '</span>' +
-      '<span class="cal-dots">' + [...new Set(cats)].slice(0, 3).map(c => '<i style="background:' + catOf(c).color + '"></i>').join('') + '</span>' +
-      (inc ? '<span class="cal-in">+' + api.compact(inc) + '</span>' : '') + (exp ? '<span class="cal-out">−' + api.compact(exp) + '</span>' : '') +
-      (!past && f ? '<span class="cal-bal">' + api.compact(f.balance) + '</span>' : '') + '</button>';
+      '<span class="cal-dots">' + (inc ? '<i class="in"></i>' : '') + [...new Set(cats)].filter(c => catOf(c).type !== 'income').slice(0, inc ? 2 : 3).map(c => '<i style="background:' + catOf(c).color + '"></i>').join('') + '</span></button>';
   }
   $('#calGrid').innerHTML = html;
-  $('#calSub').textContent = U.monthLabel(key) + (key < t.slice(0, 7) ? ' · lo que pasó' : ' · pagos, ingresos y saldo previsto al cierre de cada día');
+  $('#calSub').textContent = key < t.slice(0, 7) ? U.monthLabel(key) + ' · lo que pasó' : 'Toca un día para ver sus pagos';
 
   renderDay(byDate, prep);
   const n = 61, days = fc.days.slice(0, n);
@@ -318,8 +318,8 @@ export function renderWeekCard(){
   const box = $('#weekCard'), {ctx} = data(), r = weeklyReport(ctx, lastClosedWeek(ctx.today));
   box.hidden = r.empty; if (r.empty) return;
   const isNew = seen() < r.ws;
-  box.innerHTML = '<div class="card-head"><div><h2 id="weekTitle">Tu semana' + (isNew ? ' <span class="badge new">Nuevo</span>' : '') + '</h2><p class="sub">' + weekLabel(r) + ' · gastaste ' + money(r.totals.exp) + (r.avg ? ', ' + delta(r.totals.exp, r.avg.exp, 'tu promedio') : '') + '</p></div>' +
-    '<button type="button" class="btn sm" data-report>Ver reporte</button></div><ul class="hl">' + r.highlights.slice(0, 2).map(h => '<li class="' + h.level + '">' + hlText(h) + '</li>').join('') + '</ul>';
+  box.innerHTML = '<div class="card-head"><div><h2 id="weekTitle">Tu semana' + (isNew ? ' <span class="badge new">Nuevo</span>' : '') + '</h2><p class="sub">' + weekLabel(r) + ' · gastaste ' + money(r.totals.exp) + '</p></div>' +
+    '<button type="button" class="btn sm" data-report>Ver reporte</button></div><ul class="hl">' + r.highlights.slice(0, 1).map(h => '<li class="' + h.level + '">' + hlText(h) + '</li>').join('') + '</ul>';
 }
 
 let repWeek = null;
@@ -368,8 +368,8 @@ export async function renderPush(refresh){
   if (refresh){ try { pushUI.on = !!(await push.current()); } catch(e){ pushUI.on = false; } }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   let msg, can = false;
-  if (!push.supported()) msg = ios && !standalone ? 'En iPhone los avisos solo funcionan con la app instalada: Compartir → «Agregar a pantalla de inicio», y ábrela desde ese icono.' : 'Este navegador no admite avisos. El reporte aparece de todos modos en el Resumen cada lunes.';
-  else if (!push.configured) msg = 'El reporte aparece cada lunes en el Resumen. Para recibir además un aviso en el celular falta configurar el envío (ver «Aviso semanal» en el README).';
+  if (!push.supported()) msg = ios && !standalone ? 'En iPhone los avisos solo funcionan con la app instalada: Compartir → «Agregar a pantalla de inicio», y ábrela desde ese icono.' : 'Este navegador no admite avisos. El reporte aparece de todos modos en el Inicio cada lunes.';
+  else if (!push.configured) msg = 'El reporte aparece cada lunes en el Inicio. Para recibir además un aviso en el celular falta configurar el envío (ver «Aviso semanal» en el README).';
   else if (push.permission() === 'denied') msg = 'Los avisos están bloqueados para esta app. Actívalos en los ajustes de tu navegador o del teléfono y vuelve aquí.';
   else { can = true; msg = pushUI.on ? 'Activo en este dispositivo: cada lunes por la mañana recibirás un aviso con lo que gastaste en la semana.' : 'Recibe un aviso cada lunes por la mañana con lo que gastaste en la semana. Se activa por dispositivo.'; }
   info.innerHTML = esc(msg) + (pushUI.error ? '<br><span class="err">' + esc(pushUI.error) + '</span>' : '');

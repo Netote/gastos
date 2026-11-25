@@ -70,21 +70,17 @@
       <button type="button" id="nextM" class="icon-btn" aria-label="Mes siguiente" data-ico="right"></button>
     </div>
     <div class="top-actions">
-      <button type="button" id="syncBtn" class="chip" aria-live="polite"></button>
       <button type="button" id="addTop" class="btn primary desk-only"><span data-ico="plus:18"></span><span>Agregar</span></button>
-      <button type="button" id="themeBtn" class="icon-btn" aria-label="Cambiar tema"></button>
-      <button type="button" id="settingsBtn" class="icon-btn" aria-label="Datos y ajustes" title="Datos y ajustes" data-ico="sliders"></button>
+      <button type="button" id="settingsBtn" class="icon-btn" aria-label="Datos y ajustes" title="Datos y ajustes"><span data-ico="sliders"></span><span id="syncDot" class="sync-dot" aria-hidden="true"></span></button>
     </div>
   </div>
   <nav class="tabs" aria-label="Secciones">
     <div class="wrap tabs-in">
       <span class="tab-ind" aria-hidden="true"></span>
-      <a href="#resumen" data-view="resumen"><span data-ico="dashboard"></span><span>Resumen</span></a>
+      <a href="#resumen" data-view="resumen"><span data-ico="home"></span><span>Inicio</span></a>
       <a href="#movimientos" data-view="movimientos"><span data-ico="list"></span><span>Movimientos</span></a>
-      <a href="#presupuestos" data-view="presupuestos"><span data-ico="pie"></span><span>Presupuestos</span></a>
-      <a href="#metas" data-view="metas"><span data-ico="target"></span><span>Metas</span></a>
       <a href="#planear" data-view="planear"><span data-ico="calendar"></span><span>Planear</span></a>
-      <a href="#fijos" data-view="fijos"><span data-ico="repeat"></span><span>Fijos</span></a>
+      <a href="#metas" data-view="metas"><span data-ico="target"></span><span>Metas</span></a>
     </div>
   </nav>
 </header>
@@ -97,69 +93,81 @@
 
   <!-- Resumen -->
   <section class="view" id="v-resumen" data-view="resumen" aria-labelledby="h-resumen">
-    <h1 class="sr-only" id="h-resumen">Resumen del mes</h1>
+    <h1 class="sr-only" id="h-resumen">Inicio</h1>
     <section id="balCard" class="card bal" aria-labelledby="balTitle">
       <div class="bal-main">
-        <h2 id="balTitle" class="bal-label">Saldo actual</h2>
-        <p id="balValue" class="bal-value"></p>
-        <p id="balSub" class="bal-sub"></p>
+        <h2 id="balTitle" class="bal-label">Tu saldo</h2>
+        <button type="button" id="balBtn" class="bal-btn" aria-describedby="balEditHint"><span id="balValue" class="bal-value"></span><span class="bal-edit" data-ico="pencil:16"></span></button>
+        <span id="balEditHint" class="sr-only">Tocar para ajustar el saldo</span>
+        <p id="balStatus" class="bal-status"></p>
       </div>
       <div class="bal-acts">
-        <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>Simular compra</span></button>
-        <button type="button" id="balBtn" class="btn"><span data-ico="pencil:18"></span><span>Ajustar saldo</span></button>
+        <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>¿Me alcanza?</span></button>
       </div>
     </section>
-    <section id="weekCard" class="card week" aria-labelledby="weekTitle" hidden></section>
     <section id="reviewCard" class="card review" aria-labelledby="reviewTitle" hidden>
       <div class="card-head">
-        <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos desde Apple Pay o el aviso de tu banco. Toca uno para corregirlo o confirma con la palomita.</p></div>
+        <div><h2 id="reviewTitle">Gastos por revisar</h2><p class="sub">Llegaron solos. Toca uno para corregirlo o confírmalo con la palomita.</p></div>
         <button type="button" id="confirmAll" class="btn sm">Confirmar todos</button>
       </div>
       <ul id="reviewList" class="tx-list"></ul>
       <p id="reviewMore" class="hint" hidden></p>
     </section>
-    <div id="kpis" class="kpis"></div>
+    <div id="duo" class="duo"></div>
     <div class="grid">
-      <section class="card c-7" aria-labelledby="donutTitle">
-        <div class="card-head"><div><h2 id="donutTitle">Gastos por categoría</h2><p class="sub" id="donutSub"></p></div></div>
-        <div id="donutEmpty" class="empty" hidden>Sin gastos en este mes.</div>
-        <div id="donutWrap" class="donut-wrap">
-          <div class="chart-box donut-box"><canvas id="donutCanvas" role="img" aria-label="Gráfica de dona de gastos por categoría"></canvas><div class="donut-center" aria-hidden="true"><span id="donutTotal"></span><small>gastado</small></div></div>
-          <ul id="legend" class="legend" aria-label="Detalle por categoría"></ul>
-        </div>
-      </section>
       <section class="card c-5" aria-labelledby="insTitle">
-        <div class="card-head"><div><h2 id="insTitle">Indicadores</h2><p class="sub">Para decidir mejor este mes</p></div></div>
+        <div class="card-head"><h2 id="insTitle">Lo importante</h2></div>
         <ul id="insights" class="insights"></ul>
       </section>
-      <section class="card c-7" aria-labelledby="barsTitle">
-        <div class="card-head"><div><h2 id="barsTitle">Ingresos vs. gastos</h2><p class="sub">Últimos 6 meses</p></div></div>
-        <div id="barsEmpty" class="empty" hidden>Aún no hay movimientos en estos 6 meses.</div>
-        <div id="barsBox" class="chart-box"><canvas id="barsCanvas" role="img" aria-label="Gráfica de barras de ingresos y gastos"></canvas></div>
-        <details class="details" id="barsDetails"><summary>Ver datos en tabla</summary><div class="table-scroll" id="barsTable"></div></details>
+      <section class="card c-7" aria-labelledby="catsTitle">
+        <div class="card-head"><div><h2 id="catsTitle">En qué se va tu dinero</h2><p class="sub" id="catsSub"></p></div></div>
+        <ul id="topCats" class="top-cats"></ul>
       </section>
-      <section class="card c-5" aria-labelledby="flowTitle">
-        <div class="card-head"><div><h2 id="flowTitle">Flujo del mes</h2><p class="sub">Acumulado día a día</p></div></div>
-        <div id="flowEmpty" class="empty" hidden>Aún no hay movimientos en este mes.</div>
-        <div id="flowBox" class="chart-box"><canvas id="flowCanvas" role="img" aria-label="Gráfica de líneas del flujo acumulado del mes"></canvas></div>
-      </section>
-      <section class="card c-12" aria-labelledby="recentTitle">
-        <div class="card-head"><h2 id="recentTitle">Últimos movimientos</h2><a href="#movimientos" class="btn sm">Ver todos</a></div>
+      <section id="weekCard" class="card week c-5" aria-labelledby="weekTitle" hidden></section>
+      <section class="card c-7 recent" aria-labelledby="recentTitle">
+        <div class="card-head"><h2 id="recentTitle">Lo último</h2><a href="#movimientos" class="btn sm">Ver todo</a></div>
         <ul id="recentList" class="tx-list"></ul>
       </section>
     </div>
+    <details id="analysis" class="card analysis">
+      <summary><span data-ico="gauge:18"></span><span>Ver análisis del mes</span><span class="chev" data-ico="right:18"></span></summary>
+      <div class="analysis-in">
+        <div id="kpis" class="kpis"></div>
+        <ul id="stats" class="insights"></ul>
+        <div class="grid">
+          <section class="c-7" aria-labelledby="barsTitle">
+            <div class="card-head"><div><h2 id="barsTitle">Ingresos y gastos</h2><p class="sub">Últimos 6 meses</p></div></div>
+            <div id="barsEmpty" class="empty sm" hidden>Aún no hay movimientos en estos 6 meses.</div>
+            <div id="barsBox" class="chart-box"><canvas id="barsCanvas" role="img" aria-label="Gráfica de barras de ingresos y gastos"></canvas></div>
+            <details class="details" id="barsDetails"><summary>Ver datos en tabla</summary><div class="table-scroll" id="barsTable"></div></details>
+          </section>
+          <section class="c-5" aria-labelledby="flowTitle">
+            <div class="card-head"><div><h2 id="flowTitle">Flujo del mes</h2><p class="sub">Acumulado día a día</p></div></div>
+            <div id="flowEmpty" class="empty sm" hidden>Aún no hay movimientos en este mes.</div>
+            <div id="flowBox" class="chart-box"><canvas id="flowCanvas" role="img" aria-label="Gráfica de líneas del flujo acumulado del mes"></canvas></div>
+          </section>
+        </div>
+      </div>
+    </details>
   </section>
 
   <!-- Movimientos -->
   <section class="view" id="v-movimientos" data-view="movimientos" aria-labelledby="h-mov" hidden>
     <div class="card">
       <div class="card-head"><h1 class="h2" id="h-mov">Movimientos</h1></div>
-      <div class="filters">
-        <div class="f-search"><label for="qSearch">Buscar</label><input id="qSearch" type="search" placeholder="Descripción, categoría o monto" autocomplete="off" enterkeyhint="search"></div>
-        <div><label for="qType">Tipo</label><select id="qType"><option value="all">Todos</option><option value="expense">Gastos</option><option value="income">Ingresos</option></select></div>
+      <div class="search"><span data-ico="search:18" class="search-ico"></span><label for="qSearch" class="sr-only">Buscar</label><input id="qSearch" type="search" placeholder="Buscar" autocomplete="off" enterkeyhint="search"></div>
+      <div class="filter-row">
+        <div class="seg seg-inline" id="qTypeSeg" role="radiogroup" aria-label="Tipo">
+          <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="all">Todos</button>
+          <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="expense">Gastos</button>
+          <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="income">Ingresos</button>
+        </div>
+        <button type="button" id="qMoreBtn" class="btn sm" aria-expanded="false" aria-controls="qMore" aria-label="Más filtros"><span data-ico="sliders:16"></span><span class="f-lbl">Filtros</span><span id="qMoreCount" class="count" hidden></span></button>
+      </div>
+      <div class="filters" id="qMore" hidden>
         <div><label for="qCat">Categoría</label><select id="qCat"></select></div>
         <div><label for="qSort">Ordenar</label><select id="qSort"><option value="date-desc">Más recientes</option><option value="date-asc">Más antiguos</option><option value="amt-desc">Mayor monto</option><option value="amt-asc">Menor monto</option></select></div>
-        <label class="chk"><input type="checkbox" id="qAll"> Todos los meses</label>
+        <label class="chk"><input type="checkbox" id="qAll"> Buscar en todos los meses</label>
       </div>
       <p class="list-summary" id="listSummary" aria-live="polite"></p>
       <div id="txList"></div>
@@ -167,54 +175,60 @@
     </div>
   </section>
 
-  <!-- Presupuestos -->
-  <section class="view" id="v-presupuestos" data-view="presupuestos" aria-labelledby="h-bud" hidden>
-    <div class="card">
-      <div class="card-head"><div><h1 class="h2" id="h-bud">Presupuestos</h1><p class="sub" id="budSub">Define un límite mensual por categoría</p></div></div>
-      <div id="budTotal" class="bud-total" hidden></div>
-      <ul id="budList" class="bud-list"></ul>
-    </div>
-  </section>
-
-  <!-- Metas de ahorro -->
+  <!-- Metas: ahorro -->
   <section class="view" id="v-metas" data-view="metas" aria-labelledby="h-goals" hidden>
+    <nav class="subnav" aria-label="Metas"><a href="#metas" data-sub="metas">Ahorro</a><a href="#presupuestos" data-sub="presupuestos">Límites de gasto</a></nav>
     <div class="view-head">
-      <div><h1 class="h2" id="h-goals">Metas de ahorro</h1><p class="sub">Separa dinero para lo que importa y mide tu avance</p></div>
+      <div><h1 class="h2" id="h-goals">Metas de ahorro</h1><p class="sub">Aparta dinero para lo que importa</p></div>
       <button type="button" id="newGoal" class="btn primary"><span data-ico="plus:18"></span><span>Nueva meta</span></button>
     </div>
     <div id="goalList" class="goal-grid"></div>
   </section>
 
+  <!-- Metas: límites de gasto (presupuestos) -->
+  <section class="view" id="v-presupuestos" data-view="presupuestos" aria-labelledby="h-bud" hidden>
+    <nav class="subnav" aria-label="Metas"><a href="#metas" data-sub="metas">Ahorro</a><a href="#presupuestos" data-sub="presupuestos">Límites de gasto</a></nav>
+    <div class="card">
+      <div class="card-head"><div><h1 class="h2" id="h-bud">Límites de gasto</h1><p class="sub" id="budSub">Cuánto quieres gastar al mes en cada cosa</p></div></div>
+      <div id="budTotal" class="bud-total" hidden></div>
+      <ul id="budList" class="bud-list"></ul>
+      <details id="budMore" class="bud-more">
+        <summary><span data-ico="plus:18"></span><span id="budMoreLbl">Poner un límite</span></summary>
+        <ul id="budFree" class="bud-list free"></ul>
+      </details>
+    </div>
+  </section>
+
   <!-- Planear: calendario predictivo -->
   <section class="view" id="v-planear" data-view="planear" aria-labelledby="h-plan" hidden>
-    <div class="view-head">
-      <div><h1 class="h2" id="h-plan">Planear</h1><p class="sub">Tus pagos por día y cómo quedará tu saldo</p></div>
-      <button type="button" class="btn primary" data-chat><span data-ico="chat:18"></span><span>Simular compra</span></button>
-    </div>
-    <div id="planKpis" class="kpis"></div>
+    <h1 class="sr-only" id="h-plan">Planear</h1>
+    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Pagos fijos</a></nav>
+    <div id="planKpis" class="card plan-sum"></div>
     <ul id="planAlerts" class="alerts" aria-label="Avisos de la proyección"></ul>
     <div class="grid">
       <section class="card c-7" aria-labelledby="calTitle">
         <div class="card-head"><div><h2 id="calTitle">Calendario</h2><p class="sub" id="calSub"></p></div></div>
         <div class="cal-head" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
         <div id="calGrid" class="cal"></div>
-        <p class="cal-legend"><span><i class="k-in"></i>Ingreso</span><span><i class="k-out"></i>Gasto</span><span><i class="k-low"></i>Saldo justo</span><span><i class="k-neg"></i>Faltante</span><span><i class="k-clash"></i>Pagos que coinciden</span></p>
+        <p class="cal-legend"><span><i class="k-low"></i>Saldo justo</span><span><i class="k-neg"></i>Te faltaría dinero</span><span><i class="k-clash"></i>Varios pagos juntos</span></p>
       </section>
       <section class="card c-5" aria-labelledby="dayTitle"><div id="planDay"></div></section>
       <section class="card c-12" aria-labelledby="projTitle">
-        <div class="card-head"><div><h2 id="projTitle">Saldo previsto</h2><p class="sub">Próximos 60 días: fijos, pagos programados y tu gasto diario habitual</p></div></div>
+        <div class="card-head"><div><h2 id="projTitle">Cómo irá tu saldo</h2><p class="sub">Próximos 60 días</p></div></div>
         <div class="chart-box"><canvas id="planCanvas" role="img" aria-label="Saldo previsto a 60 días"></canvas></div>
+        <details class="details" id="planInfoBox" hidden><summary>Cómo lo calculo</summary><ul id="planInfo" class="hl"></ul></details>
       </section>
     </div>
   </section>
 
-  <!-- Recurrentes -->
+  <!-- Planear: pagos fijos -->
   <section class="view" id="v-fijos" data-view="fijos" aria-labelledby="h-rec" hidden>
+    <nav class="subnav" aria-label="Planear"><a href="#planear" data-sub="planear">Calendario</a><a href="#fijos" data-sub="fijos">Pagos fijos</a></nav>
     <div class="view-head">
-      <div><h1 class="h2" id="h-rec">Pagos e ingresos fijos</h1><p class="sub">Se registran solos el día que toca: renta, suscripciones, quincena, meses sin intereses</p></div>
+      <div><h1 class="h2" id="h-rec">Pagos fijos</h1><p class="sub">Renta, suscripciones, tu quincena o compras a meses: se anotan solos el día que toca</p></div>
       <button type="button" id="newRec" class="btn primary"><span data-ico="plus:18"></span><span>Nuevo fijo</span></button>
     </div>
-    <div id="recSummary" class="rec-summary"></div>
+    <div id="recSummary" class="card rec-sum" hidden></div>
     <div id="recList" class="card rec-card"></div>
   </section>
 
@@ -246,22 +260,23 @@
         <div id="fCats" class="cat-grid"></div>
         <p class="err" id="fCatsErr" hidden></p>
       </fieldset>
-      <div class="row2">
+      <div class="field">
+        <label for="fDate">Fecha</label>
+        <input id="fDate" type="date">
+        <p class="err" id="fDateErr" hidden></p>
+      </div>
+      <details class="more-fields" id="fMore">
+        <summary>Agregar nota o método de pago</summary>
         <div class="field">
-          <label for="fDate">Fecha</label>
-          <input id="fDate" type="date">
-          <p class="err" id="fDateErr" hidden></p>
-        </div>
-        <div class="field">
-          <label for="fDesc">Descripción <span class="opt">(opcional)</span></label>
+          <label for="fDesc">Nota</label>
           <input id="fDesc" type="text" maxlength="120" autocomplete="off" placeholder="Ej. Supermercado" enterkeyhint="done">
         </div>
-      </div>
-      <div class="field">
-        <label for="fCard">Método de pago <span class="opt">(opcional)</span></label>
-        <input id="fCard" type="text" maxlength="40" list="cardList" autocomplete="off" placeholder="Ej. BBVA Azul, Efectivo" enterkeyhint="done">
-        <datalist id="cardList"></datalist>
-      </div>
+        <div class="field">
+          <label for="fCard">Método de pago</label>
+          <input id="fCard" type="text" maxlength="40" list="cardList" autocomplete="off" placeholder="Ej. Tarjeta, Efectivo" enterkeyhint="done">
+          <datalist id="cardList"></datalist>
+        </div>
+      </details>
       <label class="chk remember" id="fRememberRow" hidden><input type="checkbox" id="fRemember"> <span id="fRememberTxt"></span></label>
       <p class="hint" id="fRecHint" hidden></p>
     </div>
@@ -426,6 +441,14 @@
       <h3>Reglas por comercio</h3>
       <ul id="ruleList" class="rule-list"></ul>
       <p class="hint" id="ruleHint"></p>
+    </section>
+    <section>
+      <h3>Apariencia</h3>
+      <div class="seg seg-3" id="themeSeg" role="radiogroup" aria-label="Tema">
+        <button type="button" role="radio" aria-checked="true" tabindex="0" data-type="auto">Automático</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="light">Claro</button>
+        <button type="button" role="radio" aria-checked="false" tabindex="-1" data-type="dark">Oscuro</button>
+      </div>
     </section>
     <section>
       <h3>Moneda</h3>

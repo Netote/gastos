@@ -6,9 +6,11 @@ Cada compra con tarjeta puede registrarse sola en tu iPhone a partir del aviso d
 
 ## Funciones
 
-- **Saldo actual:** cuánto dinero tienes hoy. Lo ajustas una vez con lo que traes y después se actualiza solo con cada ingreso o gasto. Los movimientos con fecha futura no cuentan hasta su día.
-- **Resumen del mes:** ingresos, gastos, balance y tasa de ahorro, con comparación contra el mes anterior.
-- **Indicadores:**
+La app tiene cuatro pestañas: **Inicio**, **Movimientos**, **Planear** (calendario y pagos fijos) y **Metas** (ahorro y límites de gasto). El tema claro u oscuro se elige en «Datos y ajustes».
+
+- **Saldo actual:** cuánto dinero tienes hoy, con una frase que te dice si vas bien. Tocas la cifra para ajustarla una vez y después se actualiza sola con cada ingreso o gasto. Los movimientos con fecha futura no cuentan hasta su día.
+- **Inicio:** lo que entró y lo que salió en el mes, «Lo importante» (como máximo tres avisos, el más urgente primero), en qué se va tu dinero y tus últimos movimientos. Los montos sin centavos se muestran sin «.00».
+- **Ver análisis del mes** (plegado en el Inicio): ingresos, gastos, balance y tasa de ahorro contra el mes anterior, y estos indicadores:
   - proyección de cierre de mes (gastos fijos más el ritmo de los variables);
   - regla 50/30/20;
   - meses cubiertos por tu fondo de emergencia;
@@ -18,9 +20,9 @@ Cada compra con tarjeta puede registrarse sola en tu iPhone a partir del aviso d
 - **Planear (calendario predictivo):** tus pagos e ingresos por día y el saldo previsto al cierre de cada uno, hasta 12 meses adelante. Avisa de faltantes, de días con saldo justo y de pagos que coinciden. Ver [Planear](#planear-calendario-simulador-y-reporte-semanal).
 - **Simulador de compras (chat):** escribe «laptop de 15,000 a 12 meses» y te dice si te alcanza, cómo quedaría tu saldo a 30 y 60 días, qué pasa con tus deudas y qué alternativas hay. Calcula en tu dispositivo, sin IA externa.
 - **Reporte semanal:** cada lunes, los hechos de tu semana (cuánto gastaste contra tu promedio, gastos fuera de lo normal, presupuestos, lo que viene). Con aviso opcional en el celular.
-- **Gráficas:** gastos por categoría, ingresos contra gastos de los últimos 6 meses y flujo acumulado del mes.
-- **Movimientos:** búsqueda, filtros, agrupación por día, edición y eliminación con opción de deshacer.
-- **Presupuestos:** límite mensual por categoría.
+- **Gráficas** (también en el análisis): ingresos contra gastos de los últimos 6 meses y flujo acumulado del mes.
+- **Movimientos:** búsqueda, filtro rápido por gastos o ingresos, más filtros (categoría, orden, todos los meses), agrupación por día, edición y eliminación con opción de deshacer.
+- **Límites de gasto (presupuestos):** límite mensual por categoría; solo se muestran las categorías que ya tienen uno.
 - **Metas de ahorro:** avance y monto sugerido por mes según la fecha límite.
 - **Fijos:** renta, suscripciones, quincena y meses sin intereses. Se registran solos el día que toca y se detienen al llegar al número de pagos.
 - **Registro automático (iPhone):** cada compra con tarjeta se registra sola desde el aviso de tu banco; los pagos con Apple Pay sirven de respaldo. Ver [Registro automático](#registro-automático-de-gastos-iphone).
@@ -216,7 +218,7 @@ Pestaña **Planear**. Los días pasados muestran lo que ocurrió; hoy y los futu
 
 ### Simulador de compras
 
-Botón **Simular compra** (en el Resumen y en Planear). Entiende frases como:
+Botón **¿Me alcanza?** (en el Inicio y en Planear). Entiende frases como:
 
 | Frase | Qué hace |
 |---|---|
@@ -239,7 +241,7 @@ El simulador **no usa tarjetas de crédito**: una compra de contado baja tu sald
 
 ### Reporte semanal
 
-Cada lunes aparece la tarjeta **Tu semana** en el Resumen, con la semana cerrada (lunes a domingo). El reporte completo incluye lo más importante, ingresos y gastos contra la semana anterior y contra tu promedio, en qué se fue, gastos fuera de lo normal, fijos pagados, lo que viene en 7 días, presupuestos, metas y deudas. Con las flechas puedes ver semanas anteriores: se recalculan con tus datos, no se guardan aparte.
+Cada lunes aparece la tarjeta **Tu semana** en el Inicio, con la semana cerrada (lunes a domingo). El reporte completo incluye lo más importante, ingresos y gastos contra la semana anterior y contra tu promedio, en qué se fue, gastos fuera de lo normal, fijos pagados, lo que viene en 7 días, presupuestos, metas y deudas. Con las flechas puedes ver semanas anteriores: se recalculan con tus datos, no se guardan aparte.
 
 ### Aviso semanal (notificación push, opcional)
 

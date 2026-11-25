@@ -5,7 +5,7 @@
  * También muestra el aviso semanal (push) y abre el reporte al tocarlo.
  * Cambia VERSION al publicar cambios para limpiar cachés viejas.
  */
-const VERSION = 'gastos-v2.5.0';
+const VERSION = 'gastos-v2.6.0';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/boot.js', 'js/app.js', 'js/util.js', 'js/store.js', 'js/sync.js', 'js/config.js', 'js/charts.js', 'js/icons.js', 'js/fx.js',
